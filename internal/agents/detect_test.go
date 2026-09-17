@@ -138,12 +138,160 @@ func TestDetectWith(t *testing.T) {
 			env:       map[string]string{"AI_AGENT": "bad agent", "GEMINI_CLI": "1"},
 			wantAgent: "gemini-cli",
 		},
+		{
+			name:      "ANTIGRAVITY_AGENT",
+			env:       map[string]string{"ANTIGRAVITY_AGENT": "1"},
+			wantAgent: "antigravity",
+		},
+		{
+			name:      "AUGMENT_AGENT",
+			env:       map[string]string{"AUGMENT_AGENT": "1"},
+			wantAgent: "augment-cli",
+		},
+		{
+			name:      "REPL_ID",
+			env:       map[string]string{"REPL_ID": "abc123"},
+			wantAgent: "replit",
+		},
+		{
+			name:      "GOOSE_PROVIDER",
+			env:       map[string]string{"GOOSE_PROVIDER": "anthropic"},
+			wantAgent: "goose",
+		},
+		{
+			name:      "claude-code takes priority over goose",
+			env:       map[string]string{"GOOSE_PROVIDER": "anthropic", "CLAUDECODE": "1"},
+			wantAgent: "claude-code",
+		},
+		{
+			name:      "kiro takes priority over goose",
+			env:       map[string]string{"GOOSE_PROVIDER": "anthropic", "TERM_PROGRAM": "kiro"},
+			wantAgent: "kiro",
+		},
+		{
+			name:      "CLAUDE_CODE_IS_COWORK detected as cowork",
+			env:       map[string]string{"CLAUDE_CODE_IS_COWORK": "1"},
+			wantAgent: "cowork",
+		},
+		{
+			name:      "cowork takes priority over CLAUDECODE",
+			env:       map[string]string{"CLAUDE_CODE_IS_COWORK": "1", "CLAUDECODE": "1"},
+			wantAgent: "cowork",
+		},
+		{
+			name:      "CLAUDE_CODE",
+			env:       map[string]string{"CLAUDE_CODE": "1"},
+			wantAgent: "claude-code",
+		},
+		{
+			name:      "CURSOR_AGENT_SOCKET detected as cursor-cloud",
+			env:       map[string]string{"CURSOR_AGENT_SOCKET": "/run/cursor/api.sock"},
+			wantAgent: "cursor-cloud",
+		},
+		{
+			name:      "CURSOR_CONVERSATION_ID with bc- prefix detected as cursor-cloud",
+			env:       map[string]string{"CURSOR_CONVERSATION_ID": "bc-76853ea2-d731-495e-8b09-5b171936f133"},
+			wantAgent: "cursor-cloud",
+		},
+		{
+			name:      "CURSOR_CONVERSATION_ID without bc- prefix is ignored",
+			env:       map[string]string{"CURSOR_CONVERSATION_ID": "local-thread-1"},
+			wantAgent: "",
+		},
+		{
+			name:      "cursor-cloud takes priority over CURSOR_AGENT",
+			env:       map[string]string{"CURSOR_AGENT_SOCKET": "/run/cursor/api.sock", "CURSOR_AGENT": "1"},
+			wantAgent: "cursor-cloud",
+		},
+		{
+			name:      "CURSOR_AGENT detected as cursor-cli",
+			env:       map[string]string{"CURSOR_AGENT": "1"},
+			wantAgent: "cursor-cli",
+		},
+		{
+			name:      "CURSOR_EXTENSION_HOST_ROLE agent-exec detected as cursor-cli",
+			env:       map[string]string{"CURSOR_EXTENSION_HOST_ROLE": "agent-exec"},
+			wantAgent: "cursor-cli",
+		},
+		{
+			name:      "CURSOR_EXTENSION_HOST_ROLE with other value is ignored",
+			env:       map[string]string{"CURSOR_EXTENSION_HOST_ROLE": "worker"},
+			wantAgent: "",
+		},
+		{
+			name:      "CURSOR_TRACE_ID detected as cursor",
+			env:       map[string]string{"CURSOR_TRACE_ID": "abc"},
+			wantAgent: "cursor",
+		},
+		{
+			name:      "CURSOR_AGENT takes priority over CURSOR_TRACE_ID",
+			env:       map[string]string{"CURSOR_TRACE_ID": "abc", "CURSOR_AGENT": "1"},
+			wantAgent: "cursor-cli",
+		},
+		{
+			name:      "TERM_PROGRAM kiro detected as kiro",
+			env:       map[string]string{"TERM_PROGRAM": "kiro"},
+			wantAgent: "kiro",
+		},
+		{
+			name:      "TERM_PROGRAM with kiro as a substring is ignored",
+			env:       map[string]string{"TERM_PROGRAM": "kirostudio"},
+			wantAgent: "",
+		},
+		{
+			name:      "PATH containing .pi/agent detected as pi",
+			env:       map[string]string{"PATH": "/usr/bin:/home/user/.pi/agent/bin"},
+			wantAgent: "pi",
+		},
+		{
+			name:      "PATH with .pi/agent not on a path boundary is ignored",
+			env:       map[string]string{"PATH": "/usr/bin:/home/user/x.pi/agent"},
+			wantAgent: "",
+		},
+		{
+			name:      "PATH with Windows .pi\\agent separators detected as pi",
+			env:       map[string]string{"PATH": `C:\Windows;C:\Users\user\.pi\agent\bin`},
+			wantAgent: "pi",
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := detectWith(lookup(tt.env))
 			assert.Equal(t, tt.wantAgent, got)
+		})
+	}
+}
+
+func TestSkillHostID(t *testing.T) {
+	tests := []struct {
+		name     string
+		agent    AgentName
+		wantHost string
+	}{
+		{name: "amp", agent: "amp", wantHost: "amp"},
+		{name: "claude-code", agent: "claude-code", wantHost: "claude-code"},
+		{name: "cowork maps to claude-code", agent: "cowork", wantHost: "claude-code"},
+		{name: "codex", agent: "codex", wantHost: "codex"},
+		{name: "copilot-cli maps to github-copilot", agent: "copilot-cli", wantHost: "github-copilot"},
+		{name: "gemini-cli", agent: "gemini-cli", wantHost: "gemini-cli"},
+		{name: "opencode", agent: "opencode", wantHost: "opencode"},
+		{name: "antigravity", agent: "antigravity", wantHost: "antigravity"},
+		{name: "augment-cli maps to augment", agent: "augment-cli", wantHost: "augment"},
+		{name: "replit", agent: "replit", wantHost: "replit"},
+		{name: "goose", agent: "goose", wantHost: "goose"},
+		{name: "cursor", agent: "cursor", wantHost: "cursor"},
+		{name: "cursor-cli maps to cursor", agent: "cursor-cli", wantHost: "cursor"},
+		{name: "cursor-cloud maps to cursor", agent: "cursor-cloud", wantHost: "cursor"},
+		{name: "kiro maps to kiro-cli", agent: "kiro", wantHost: "kiro-cli"},
+		{name: "pi", agent: "pi", wantHost: "pi"},
+		{name: "unknown agent", agent: "some-custom-agent", wantHost: ""},
+		{name: "empty agent", agent: "", wantHost: ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.wantHost, SkillHostID(tt.agent))
 		})
 	}
 }

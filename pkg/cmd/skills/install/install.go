@@ -15,6 +15,7 @@ import (
 	"github.com/cli/cli/v2/api"
 	ghContext "github.com/cli/cli/v2/context"
 	"github.com/cli/cli/v2/git"
+	"github.com/cli/cli/v2/internal/agents"
 	"github.com/cli/cli/v2/internal/gh/ghtelemetry"
 	"github.com/cli/cli/v2/internal/ghinstance"
 	"github.com/cli/cli/v2/internal/ghrepo"
@@ -60,6 +61,10 @@ type InstallOptions struct {
 	AllowHiddenDirs bool // include skills in dot-prefixed directories
 	Upstream        bool // install from upstream when re-published skill detected
 
+	// DetectAgent returns the coding agent driving the CLI. Tests inject a stub;
+	// production uses agents.Detect.
+	DetectAgent func() agents.AgentName
+
 	repo      ghrepo.Interface // set when SkillSource is a GitHub repository
 	localPath string           // set when FromLocal is true
 	version   string           // parsed from SkillName@version
@@ -94,8 +99,9 @@ func NewCmdInstall(f *cmdutil.Factory, telemetry ghtelemetry.CommandRecorder, ru
 			%[2]s
 
 			Use %[1]s--agent%[1]s and %[1]s--scope%[1]s to control placement, or %[1]s--dir%[1]s for a
-			custom directory. The default scope is %[1]sproject%[1]s, and the default
-			agent is %[1]sgithub-copilot%[1]s (when running non-interactively).
+			custom directory. The default scope is %[1]sproject%[1]s. When %[1]s--agent%[1]s
+			is omitted, the coding agent driving the CLI is used if one can be
+			detected; otherwise the default is %[1]sgithub-copilot%[1]s.
 
 			At project scope, several agents (including GitHub Copilot, Cursor,
 			Codex, Gemini CLI, Antigravity, Amp, Cline, OpenCode, and Warp) share
@@ -851,8 +857,10 @@ func resolveHosts(opts *InstallOptions, canPrompt bool) ([]*registry.AgentHost, 
 		return []*registry.AgentHost{h}, nil
 	}
 
+	defaultID := defaultHostID(opts)
+
 	if !canPrompt {
-		h, err := registry.FindByID(registry.DefaultAgentID)
+		h, err := registry.FindByID(defaultID)
 		if err != nil {
 			return nil, err
 		}
@@ -864,7 +872,7 @@ func resolveHosts(opts *InstallOptions, canPrompt bool) ([]*registry.AgentHost, 
 	defaultLabel := ""
 	for i, h := range registry.Agents {
 		labels[i] = h.Name
-		if h.ID == registry.DefaultAgentID {
+		if h.ID == defaultID {
 			defaultLabel = labels[i]
 		}
 	}
@@ -885,6 +893,29 @@ func resolveHosts(opts *InstallOptions, canPrompt bool) ([]*registry.AgentHost, 
 		selected[i] = &registry.Agents[idx]
 	}
 	return selected, nil
+}
+
+// defaultHostID returns the skill host to use when --agent is omitted.
+// A detected invoking agent wins when it maps to a known host; otherwise
+// github-copilot remains the fallback.
+func defaultHostID(opts *InstallOptions) string {
+	detect := opts.DetectAgent
+	if detect == nil {
+		detect = agents.Detect
+	}
+
+	detected := detect()
+	if id := agents.SkillHostID(detected); id != "" {
+		if _, err := registry.FindByID(id); err == nil {
+			return id
+		}
+	}
+	if detected != "" {
+		if _, err := registry.FindByID(string(detected)); err == nil {
+			return string(detected)
+		}
+	}
+	return registry.DefaultAgentID
 }
 
 func resolveScope(opts *InstallOptions, canPrompt bool) (registry.Scope, error) {

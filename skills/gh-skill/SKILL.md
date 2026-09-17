@@ -42,9 +42,9 @@ gh skill install ./local-skills-repo --from-local
 Useful flags:
 
 - `--agent <id>` - target host (e.g. `github-copilot`, `claude-code`,
-  `cursor`, `codex`, `gemini-cli`). Repeat for multiple. Default is
-  `github-copilot` when non-interactive. You should know what agent you are,
-  so set this appropriately to install for yourself.
+  `cursor`, `codex`, `gemini-cli`). Repeat for multiple. When omitted,
+  `gh` uses the coding agent driving the CLI if one can be detected,
+  otherwise `github-copilot`.
 - `--scope project|user` - `project` (default) writes inside the current
   git repo; `user` writes to the home directory and applies everywhere.
 - `--pin <ref>` - pin to a tag, branch, or commit SHA. Mutually exclusive
