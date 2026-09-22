@@ -110,6 +110,8 @@ func NewCmdBrowse(f *cmdutil.Factory, runF func(*BrowseOptions) error) *cobra.Co
 			`),
 			"help:environment": heredoc.Doc(`
 				To configure a web browser other than the default, use the BROWSER environment variable.
+				When a coding agent is driving the CLI, the destination URL is printed instead of
+				opening a browser, unless GH_BROWSER is set.
 			`),
 		},
 		GroupID: "core",

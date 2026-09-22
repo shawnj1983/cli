@@ -14,6 +14,7 @@ import (
 
 	"github.com/MakeNowJust/heredoc"
 	"github.com/cli/cli/v2/api"
+	"github.com/cli/cli/v2/internal/agents"
 	"github.com/cli/cli/v2/internal/gh"
 	"github.com/cli/cli/v2/internal/gh/ghtelemetry"
 	"github.com/cli/cli/v2/internal/prompter"
@@ -55,6 +56,9 @@ type SearchOptions struct {
 	Prompter       prompter.Prompter
 	ExecutablePath string // path to the current gh binary for install subprocess
 	Exporter       cmdutil.Exporter
+	// DetectAgent returns the coding agent driving the CLI. Tests inject a stub;
+	// production leaves this nil so agents.Detect is used.
+	DetectAgent func() agents.AgentName
 
 	// User inputs
 	Query string
@@ -562,9 +566,10 @@ func promptInstall(opts *SearchOptions, skills []skillResult) error {
 		},
 	})
 
-	// Prompt for target agent host (once for all selected skills)
+	// Prompt for target agent host (once for all selected skills).
+	// Pre-select the host that matches the invoking agent when one is known.
 	hostNames := registry.AgentNames()
-	hostIdx, err := opts.Prompter.Select("Select target agent:", "", hostNames)
+	hostIdx, err := opts.Prompter.Select("Select target agent:", defaultHostDisplayName(opts), hostNames)
 	if err != nil {
 		return err
 	}
@@ -607,6 +612,24 @@ func promptInstall(opts *SearchOptions, skills []skillResult) error {
 	}
 
 	return nil
+}
+
+// defaultHostDisplayName returns the interactive picker default for the
+// invoking agent's skill host, or empty when none maps to a known host.
+func defaultHostDisplayName(opts *SearchOptions) string {
+	detect := opts.DetectAgent
+	if detect == nil {
+		detect = agents.Detect
+	}
+	id := agents.SkillHostID(detect())
+	if id == "" {
+		return ""
+	}
+	host, err := registry.FindByID(id)
+	if err != nil {
+		return ""
+	}
+	return host.Name
 }
 
 // relevanceScore computes a numeric ranking score for a search result.

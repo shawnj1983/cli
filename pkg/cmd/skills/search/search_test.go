@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cli/cli/v2/internal/agents"
 	"github.com/cli/cli/v2/internal/config"
 	"github.com/cli/cli/v2/internal/gh"
 	"github.com/cli/cli/v2/internal/prompter"
@@ -650,4 +651,28 @@ func TestSearchRun_TelemetryRecordsInstallFromResults(t *testing.T) {
 		"skill_search_install must not record the search query")
 	assert.Empty(t, installEvent.Dimensions["owner"],
 		"skill_search_install must not record the search owner filter")
+}
+
+func TestDefaultHostDisplayName(t *testing.T) {
+	tests := []struct {
+		name     string
+		detected agents.AgentName
+		want     string
+	}{
+		{name: "no agent", detected: "", want: ""},
+		{name: "cursor-cloud maps to Cursor", detected: "cursor-cloud", want: "Cursor"},
+		{name: "cursor-cli maps to Cursor", detected: "cursor-cli", want: "Cursor"},
+		{name: "claude-code maps to Claude Code", detected: "claude-code", want: "Claude Code"},
+		{name: "copilot-cli maps to GitHub Copilot", detected: "copilot-cli", want: "GitHub Copilot"},
+		{name: "unknown agent", detected: "not-a-host", want: ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := defaultHostDisplayName(&SearchOptions{
+				DetectAgent: func() agents.AgentName { return tt.detected },
+			})
+			assert.Equal(t, tt.want, got)
+		})
+	}
 }

@@ -89,6 +89,7 @@ func Test_NewCmdStatus(t *testing.T) {
 func TestJSONFields(t *testing.T) {
 	jsonfieldstest.ExpectCommandToSupportJSONFields(t, NewCmdStatus, []string{
 		"hosts",
+		"agent",
 	})
 }
 
@@ -707,6 +708,48 @@ func Test_statusRun(t *testing.T) {
 					httpmock.WithHeader(httpmock.ScopesResponder("repo,read:org"), "X-Oauth-Scopes", "repo, read:org"))
 			},
 			wantOut: `{"hosts":{"github.com":[{"state":"success","active":true,"host":"github.com","login":"monalisa","tokenSource":"GH_CONFIG_DIR/hosts.yml","token":"abc123","scopes":"repo, read:org","gitProtocol":"https"}]}}` + "\n",
+		},
+		{
+			name: "invoking agent",
+			opts: StatusOptions{
+				Hostname:      "github.com",
+				InvokingAgent: "cursor-cloud",
+			},
+			cfgStubs: func(t *testing.T, c gh.Config) {
+				login(t, c, "github.com", "monalisa", "gho_abc123", "https")
+			},
+			httpStubs: func(reg *httpmock.Registry) {
+				reg.Register(
+					httpmock.REST("GET", ""),
+					httpmock.WithHeader(httpmock.ScopesResponder("repo,read:org"), "X-Oauth-Scopes", "repo, read:org"))
+			},
+			wantOut: heredoc.Doc(`
+				github.com
+				  ✓ Logged in to github.com account monalisa (GH_CONFIG_DIR/hosts.yml)
+				  - Active account: true
+				  - Git operations protocol: https
+				  - Token: gho_******
+				  - Token scopes: 'repo', 'read:org'
+
+				Agent: cursor-cloud
+			`),
+		},
+		{
+			name: "json, invoking agent",
+			opts: StatusOptions{
+				Hostname:      "github.com",
+				InvokingAgent: "cursor-cloud",
+			},
+			jsonFields: []string{"hosts", "agent"},
+			cfgStubs: func(t *testing.T, c gh.Config) {
+				login(t, c, "github.com", "monalisa", "gho_abc123", "https")
+			},
+			httpStubs: func(reg *httpmock.Registry) {
+				reg.Register(
+					httpmock.REST("GET", ""),
+					httpmock.WithHeader(httpmock.ScopesResponder("repo,read:org"), "X-Oauth-Scopes", "repo, read:org"))
+			},
+			wantOut: `{"agent":"cursor-cloud","hosts":{"github.com":[{"state":"success","active":true,"host":"github.com","login":"monalisa","tokenSource":"GH_CONFIG_DIR/hosts.yml","scopes":"repo, read:org","gitProtocol":"https"}]}}` + "\n",
 		},
 	}
 
