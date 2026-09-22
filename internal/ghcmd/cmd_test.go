@@ -9,10 +9,12 @@ import (
 	"testing"
 
 	"github.com/cli/cli/v2/api"
+	"github.com/cli/cli/v2/internal/agents"
 	"github.com/cli/cli/v2/internal/config"
 	"github.com/cli/cli/v2/internal/gh"
 	ghmock "github.com/cli/cli/v2/internal/gh/mock"
 	"github.com/cli/cli/v2/pkg/cmdutil"
+	"github.com/cli/cli/v2/pkg/iostreams"
 	ghAPI "github.com/cli/go-gh/v2/pkg/api"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
@@ -186,6 +188,27 @@ func Test_newIOStreams_prompt(t *testing.T) {
 				cfg = config.NewBlankConfig()
 			}
 			io := newIOStreams(cfg)
+			assert.Equal(t, tt.promptDisabled, io.GetNeverPrompt())
+		})
+	}
+}
+
+func Test_applyDrivingAgentIO(t *testing.T) {
+	tests := []struct {
+		name           string
+		agent          agents.AgentName
+		promptDisabled bool
+	}{
+		{name: "no agent keeps prompts", agent: "", promptDisabled: false},
+		{name: "cursor IDE keeps prompts", agent: "cursor", promptDisabled: false},
+		{name: "cursor-cloud disables prompts", agent: "cursor-cloud", promptDisabled: true},
+		{name: "cursor-cli disables prompts", agent: "cursor-cli", promptDisabled: true},
+		{name: "claude-code disables prompts", agent: "claude-code", promptDisabled: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			io, _, _, _ := iostreams.Test()
+			applyDrivingAgentIO(io, tt.agent)
 			assert.Equal(t, tt.promptDisabled, io.GetNeverPrompt())
 		})
 	}

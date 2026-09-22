@@ -77,7 +77,7 @@ func NewCmdRoot(f *cmdutil.Factory, telemetry ghtelemetry.CommandRecorder, versi
 			$ gh pr checkout 321
 		`),
 		Annotations: map[string]string{
-			"versionInfo": versionCmd.Format(version, buildDate),
+			"versionInfo": versionCmd.FormatWithAgent(version, buildDate, f.InvokingAgent),
 		},
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 			// require that the user is authenticated before running most commands

@@ -295,3 +295,28 @@ func TestSkillHostID(t *testing.T) {
 		})
 	}
 }
+
+func TestIsDriving(t *testing.T) {
+	tests := []struct {
+		name  string
+		agent AgentName
+		want  bool
+	}{
+		{name: "empty is not driving", agent: "", want: false},
+		{name: "cursor IDE is not driving", agent: "cursor", want: false},
+		{name: "replit is not driving", agent: "replit", want: false},
+		{name: "goose is not driving", agent: "goose", want: false},
+		{name: "kiro is not driving", agent: "kiro", want: false},
+		{name: "cursor-cloud is driving", agent: "cursor-cloud", want: true},
+		{name: "cursor-cli is driving", agent: "cursor-cli", want: true},
+		{name: "claude-code is driving", agent: "claude-code", want: true},
+		{name: "copilot-cli is driving", agent: "copilot-cli", want: true},
+		{name: "explicit AI_AGENT name is driving", agent: "my-agent", want: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, IsDriving(tt.agent))
+		})
+	}
+}

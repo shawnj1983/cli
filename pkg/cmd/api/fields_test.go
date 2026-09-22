@@ -327,3 +327,47 @@ func Test_magicFieldValue(t *testing.T) {
 		})
 	}
 }
+
+func Test_warnLiteralAtFiles(t *testing.T) {
+	t.Run("existing file is warned", func(t *testing.T) {
+		f, err := os.CreateTemp(t.TempDir(), "body-*.txt")
+		require.NoError(t, err)
+		require.NoError(t, f.Close())
+
+		ios, _, _, stderr := iostreams.Test()
+		warnLiteralAtFiles(&ApiOptions{
+			IO:        ios,
+			RawFields: []string{"body=@" + f.Name()},
+		})
+		assert.Contains(t, stderr.String(), "literal string")
+		assert.Contains(t, stderr.String(), "-F")
+		assert.Contains(t, stderr.String(), f.Name())
+	})
+
+	t.Run("stdin marker is warned", func(t *testing.T) {
+		ios, _, _, stderr := iostreams.Test()
+		warnLiteralAtFiles(&ApiOptions{
+			IO:        ios,
+			RawFields: []string{"body=@-"},
+		})
+		assert.Contains(t, stderr.String(), `sent the literal string "@-"`)
+	})
+
+	t.Run("at mention that is not a file is silent", func(t *testing.T) {
+		ios, _, _, stderr := iostreams.Test()
+		warnLiteralAtFiles(&ApiOptions{
+			IO:        ios,
+			RawFields: []string{"assignee=@monalisa"},
+		})
+		assert.Empty(t, stderr.String())
+	})
+
+	t.Run("plain value is silent", func(t *testing.T) {
+		ios, _, _, stderr := iostreams.Test()
+		warnLiteralAtFiles(&ApiOptions{
+			IO:        ios,
+			RawFields: []string{"title=hello"},
+		})
+		assert.Empty(t, stderr.String())
+	})
+}

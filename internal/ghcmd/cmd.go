@@ -53,6 +53,7 @@ func Main() exitCode {
 	buildDate := build.Date
 	buildVersion := build.Version
 	hasDebug, _ := utils.IsDebugEnabled()
+	invokingAgent := agents.Detect()
 
 	cfg, cfgErr := config.NewConfig()
 	if cfgErr != nil {
@@ -66,6 +67,7 @@ func Main() exitCode {
 	} else {
 		ioStreams = iostreams.System()
 	}
+	applyDrivingAgentIO(ioStreams, invokingAgent)
 	stderr := ioStreams.ErrOut
 
 	ghExecutablePath := executablePath("gh")
@@ -73,7 +75,7 @@ func Main() exitCode {
 	additionalCommonDimensions := ghtelemetry.Dimensions{
 		"version":             strings.TrimPrefix(buildVersion, "v"),
 		"is_tty":              strconv.FormatBool(ioStreams.IsStdoutTTY()),
-		"agent":               string(agents.Detect()),
+		"agent":               string(invokingAgent),
 		"ci":                  strconv.FormatBool(ci.IsCI()),
 		"github_actions":      strconv.FormatBool(ci.IsGitHubActions()),
 		"accessible_colors":   strconv.FormatBool(ioStreams.AccessibleColorsEnabled()),
@@ -129,7 +131,7 @@ func Main() exitCode {
 	}
 	defer telemetryService.Flush()
 
-	cmdFactory := factory.New(buildVersion, string(agents.Detect()), cfgFunc, ioStreams, ghExecutablePath, telemetryService)
+	cmdFactory := factory.New(buildVersion, string(invokingAgent), cfgFunc, ioStreams, ghExecutablePath, telemetryService)
 
 	if cfgErr == nil {
 		var m migration.MultiAccount
@@ -344,6 +346,12 @@ func isUnderHomebrew(ghBinary string) bool {
 
 	brewBinPrefix := filepath.Join(strings.TrimSpace(string(brewPrefixBytes)), "bin") + string(filepath.Separator)
 	return strings.HasPrefix(ghBinary, brewBinPrefix)
+}
+
+func applyDrivingAgentIO(io *iostreams.IOStreams, agent agents.AgentName) {
+	if agents.IsDriving(agent) {
+		io.SetNeverPrompt(true)
+	}
 }
 
 func newIOStreams(cfg gh.Config) *iostreams.IOStreams {

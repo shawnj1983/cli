@@ -225,3 +225,20 @@ func SkillHostID(name AgentName) string {
 		return ""
 	}
 }
+
+// IsDriving reports whether the named agent is executing CLI commands, as
+// opposed to a human working inside that product's IDE or environment.
+// Broad or low-confidence signals such as CURSOR_TRACE_ID, REPL_ID,
+// GOOSE_PROVIDER, and TERM_PROGRAM=kiro return false so a person typing
+// in those terminals still gets interactive prompts.
+func IsDriving(name AgentName) bool {
+	if name == "" {
+		return false
+	}
+	switch name {
+	case agentCursor, agentReplit, agentGoose, agentKiro:
+		return false
+	default:
+		return true
+	}
+}

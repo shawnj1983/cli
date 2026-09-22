@@ -106,6 +106,8 @@ var HelpTopics = []helpTopic{
 			  - %[1]s$HOME/.config/gh%[1]s.
 
 			%[1]sGH_PROMPT_DISABLED%[1]s: set to any value to disable interactive prompting in the terminal.
+			Prompts are also disabled automatically when a coding agent is detected as driving
+			the CLI (for example Cursor Cloud Agent or Claude Code).
 
 			%[1]sGH_PATH%[1]s: set the path to the gh executable, useful for when gh can not properly determine
 			its own path such as in the cygwin terminal.
