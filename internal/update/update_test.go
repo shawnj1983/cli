@@ -382,6 +382,13 @@ func TestShouldCheckForUpdate(t *testing.T) {
 			expected: false,
 		},
 		{
+			name: "should not check when a driving agent is detected",
+			env: map[string]string{
+				"CURSOR_AGENT": "1",
+			},
+			expected: false,
+		},
+		{
 			name: "should not check when user is in codespace",
 			env: map[string]string{
 				"CODESPACES": "1",
@@ -435,6 +442,13 @@ func TestShouldCheckForExtensionUpdate(t *testing.T) {
 			name: "should not check when user has explicitly disable notifications",
 			env: map[string]string{
 				"GH_NO_EXTENSION_UPDATE_NOTIFIER": "1",
+			},
+			expected: false,
+		},
+		{
+			name: "should not check when a driving agent is detected",
+			env: map[string]string{
+				"CURSOR_AGENT": "1",
 			},
 			expected: false,
 		},

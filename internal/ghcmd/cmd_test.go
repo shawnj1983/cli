@@ -9,7 +9,6 @@ import (
 	"testing"
 
 	"github.com/cli/cli/v2/api"
-	"github.com/cli/cli/v2/internal/agents"
 	"github.com/cli/cli/v2/internal/config"
 	"github.com/cli/cli/v2/internal/gh"
 	ghmock "github.com/cli/cli/v2/internal/gh/mock"
@@ -194,24 +193,42 @@ func Test_newIOStreams_prompt(t *testing.T) {
 }
 
 func Test_applyDrivingAgentIO(t *testing.T) {
-	tests := []struct {
-		name           string
-		agent          agents.AgentName
-		promptDisabled bool
-	}{
-		{name: "no agent keeps prompts", agent: "", promptDisabled: false},
-		{name: "cursor IDE keeps prompts", agent: "cursor", promptDisabled: false},
-		{name: "cursor-cloud disables prompts", agent: "cursor-cloud", promptDisabled: true},
-		{name: "cursor-cli disables prompts", agent: "cursor-cli", promptDisabled: true},
-		{name: "claude-code disables prompts", agent: "claude-code", promptDisabled: true},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			io, _, _, _ := iostreams.Test()
-			applyDrivingAgentIO(io, tt.agent)
-			assert.Equal(t, tt.promptDisabled, io.GetNeverPrompt())
-		})
-	}
+	t.Run("no agent keeps defaults", func(t *testing.T) {
+		io, _, _, _ := iostreams.Test()
+		io.SetPager("less")
+		applyDrivingAgentIO(io, "")
+		assert.False(t, io.GetNeverPrompt())
+		assert.False(t, io.GetSpinnerDisabled())
+		assert.Equal(t, "less", io.GetPager())
+	})
+
+	t.Run("cursor IDE keeps defaults", func(t *testing.T) {
+		io, _, _, _ := iostreams.Test()
+		io.SetPager("less")
+		applyDrivingAgentIO(io, "cursor")
+		assert.False(t, io.GetNeverPrompt())
+		assert.False(t, io.GetSpinnerDisabled())
+		assert.Equal(t, "less", io.GetPager())
+	})
+
+	t.Run("cursor-cloud disables prompts pager and spinner", func(t *testing.T) {
+		io, _, _, _ := iostreams.Test()
+		io.SetPager("less")
+		applyDrivingAgentIO(io, "cursor-cloud")
+		assert.True(t, io.GetNeverPrompt())
+		assert.True(t, io.GetSpinnerDisabled())
+		assert.Equal(t, "", io.GetPager())
+	})
+
+	t.Run("explicit GH_PAGER is kept for a driving agent", func(t *testing.T) {
+		t.Setenv("GH_PAGER", "less")
+		io, _, _, _ := iostreams.Test()
+		io.SetPager("less")
+		applyDrivingAgentIO(io, "cursor-cli")
+		assert.True(t, io.GetNeverPrompt())
+		assert.True(t, io.GetSpinnerDisabled())
+		assert.Equal(t, "less", io.GetPager())
+	})
 }
 
 func Test_newIOStreams_spinnerDisabled(t *testing.T) {

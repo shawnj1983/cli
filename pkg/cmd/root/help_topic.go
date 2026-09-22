@@ -69,7 +69,8 @@ var HelpTopics = []helpTopic{
 			error.
 
 			%[1]sGH_PAGER%[1]s, %[1]sPAGER%[1]s (in order of precedence): a terminal paging program to send standard output
-			to, e.g. %[1]sless%[1]s.
+			to, e.g. %[1]sless%[1]s. When a coding agent is driving the CLI, paging is disabled unless
+			%[1]sGH_PAGER%[1]s is set explicitly.
 
 			%[1]sGLAMOUR_STYLE%[1]s: the style to use for rendering Markdown. See
 			<https://github.com/charmbracelet/glamour#styles>
@@ -94,6 +95,7 @@ var HelpTopics = []helpTopic{
 			%[1]sGH_NO_UPDATE_NOTIFIER%[1]s: set to any value to disable GitHub CLI update notifications.
 			When any command is executed, gh checks for new versions once every 24 hours.
 			If a newer version was found, an upgrade notice is displayed on standard error.
+			Update checks are also skipped when a coding agent is detected as driving the CLI.
 
 			%[1]sGH_NO_EXTENSION_UPDATE_NOTIFIER%[1]s: set to any value to disable GitHub CLI extension update notifications.
 			When an extension is executed, gh checks for new versions for the executed extension once every 24 hours.

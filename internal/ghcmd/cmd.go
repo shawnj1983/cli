@@ -349,8 +349,15 @@ func isUnderHomebrew(ghBinary string) bool {
 }
 
 func applyDrivingAgentIO(io *iostreams.IOStreams, agent agents.AgentName) {
-	if agents.IsDriving(agent) {
-		io.SetNeverPrompt(true)
+	if !agents.IsDriving(agent) {
+		return
+	}
+	io.SetNeverPrompt(true)
+	io.SetSpinnerDisabled(true)
+	// Keep an explicit GH_PAGER so a user or wrapper can still force paging.
+	// Unset or inherited PAGER (often "less") is the hang that agents hit.
+	if _, ghPagerSet := os.LookupEnv("GH_PAGER"); !ghPagerSet {
+		io.SetPager("")
 	}
 }
 
