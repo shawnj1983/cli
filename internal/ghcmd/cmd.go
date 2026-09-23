@@ -353,6 +353,7 @@ func applyDrivingAgentIO(io *iostreams.IOStreams, agent agents.AgentName) {
 		return
 	}
 	io.SetNeverPrompt(true)
+	io.SetNeverPromptReason(fmt.Sprintf("%s is driving the CLI", agent))
 	io.SetSpinnerDisabled(true)
 	// Keep an explicit GH_PAGER so a user or wrapper can still force paging.
 	// Unset or inherited PAGER (often "less") is the hang that agents hit.

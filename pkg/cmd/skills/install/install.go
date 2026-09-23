@@ -693,7 +693,7 @@ func selectSkillsWithSelector(opts *InstallOptions, skills []discovery.Skill, ca
 	}
 
 	if !canPrompt {
-		return nil, cmdutil.FlagErrorf("must specify a skill name when not running interactively")
+		return nil, cmdutil.FlagErrorf("%s", cmdutil.NonInteractiveHint(opts.IO, "must specify a skill name when not running interactively"))
 	}
 
 	if sel.fetchDescriptions != nil {

@@ -80,6 +80,7 @@ type IOStreams struct {
 	pagerProcess *os.Process
 
 	neverPrompt                 bool
+	neverPromptReason           string
 	accessiblePrompterEnabled   bool
 	experimentalPrompterEnabled bool
 
@@ -274,6 +275,21 @@ func (s *IOStreams) GetNeverPrompt() bool {
 
 func (s *IOStreams) SetNeverPrompt(v bool) {
 	s.neverPrompt = v
+	if !v {
+		s.neverPromptReason = ""
+	}
+}
+
+// SetNeverPromptReason records why prompts were disabled, so commands can
+// mention it in "not running interactively" errors.
+func (s *IOStreams) SetNeverPromptReason(reason string) {
+	s.neverPromptReason = reason
+}
+
+// NeverPromptReason returns why prompts were disabled, or empty if they
+// were not disabled for a recorded reason.
+func (s *IOStreams) NeverPromptReason() string {
+	return s.neverPromptReason
 }
 
 func (s *IOStreams) GetSpinnerDisabled() bool {

@@ -216,6 +216,7 @@ func Test_applyDrivingAgentIO(t *testing.T) {
 		io.SetPager("less")
 		applyDrivingAgentIO(io, "cursor-cloud")
 		assert.True(t, io.GetNeverPrompt())
+		assert.Equal(t, "cursor-cloud is driving the CLI", io.NeverPromptReason())
 		assert.True(t, io.GetSpinnerDisabled())
 		assert.Equal(t, "", io.GetPager())
 	})

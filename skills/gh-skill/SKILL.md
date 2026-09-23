@@ -53,6 +53,15 @@ Useful flags:
   as `.claude/skills/`. Don't use this unless you need to, it comes with risks.
 - `--force` - overwrite an existing install.
 
+## List installed skills
+
+```bash
+gh skill list
+gh skill list --agent cursor
+gh skill list --scope user
+gh skill list --json name,agent,source,path
+```
+
 ## Update
 
 ```bash
