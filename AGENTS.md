@@ -170,3 +170,13 @@ client.REST(hostname, "GET", "repos/owner/repo", nil, &data)
 ```
 
 For host resolution, use `cfg.Authentication().DefaultHost()` — not `ghinstance.Default()` which always returns `github.com`.
+
+## Cursor Cloud specific instructions
+
+Cursor Cloud Agent containers set `NO_COLOR=1`. The `AlecAivazis/survey` library honors this and strips ANSI color codes, so three color-assertion tests in `pkg/surveyext` (`Test_GhEditor_Prompt_skip`, `Test_GhEditor_Prompt_editorAppend`, `Test_GhEditor_Prompt_editorTruncate`) fail under the default `go test ./...`. This is an environment artifact, not a code defect. Run the suite with `NO_COLOR` unset for a clean result:
+
+```bash
+env -u NO_COLOR go test ./...
+```
+
+The environment provides the pinned Go toolchain (`go1.26.3`, auto-downloaded per `go.mod`) and `golangci-lint` v2.11.0 on `PATH`, so `make`, `go test ./...`, and `make lint` work without extra setup.
