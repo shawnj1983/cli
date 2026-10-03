@@ -25,6 +25,13 @@ func NewCmdVersion(f *cmdutil.Factory, version, buildDate string) *cobra.Command
 }
 
 func Format(version, buildDate string) string {
+	return FormatWithAgent(version, buildDate, "")
+}
+
+// FormatWithAgent formats the version string and, when agent is non-empty,
+// appends the detected invoking agent so `gh version` can show what is
+// driving the CLI.
+func FormatWithAgent(version, buildDate, agent string) string {
 	version = strings.TrimPrefix(version, "v")
 
 	var dateStr string
@@ -32,7 +39,11 @@ func Format(version, buildDate string) string {
 		dateStr = fmt.Sprintf(" (%s)", buildDate)
 	}
 
-	return fmt.Sprintf("gh version %s%s\n%s\n", version, dateStr, changelogURL(version))
+	out := fmt.Sprintf("gh version %s%s\n%s\n", version, dateStr, changelogURL(version))
+	if agent != "" {
+		out += fmt.Sprintf("Agent: %s\n", agent)
+	}
+	return out
 }
 
 func changelogURL(version string) string {

@@ -98,10 +98,11 @@ func NewCmdApi(f *cmdutil.Factory, runF func(*ApiOptions) error) *cobra.Command 
 			were added. Override the method with %[1]s--method%[1]s.
 
 			Pass one or more %[1]s-f/--raw-field%[1]s values in %[1]skey=value%[1]s format to add static string
-			parameters to the request payload. To add non-string or placeholder-determined values, see
-			%[1]s-F/--field%[1]s below. Note that adding request parameters will automatically switch the
-			request method to %[1]sPOST%[1]s. To send the parameters as a %[1]sGET%[1]s query string instead, use
-			%[1]s--method GET%[1]s.
+			parameters to the request payload. Values are sent literally, including those that
+			start with %[1]s@%[1]s. To read a value from a file, use %[1]s-F/--field%[1]s instead. To add
+			non-string or placeholder-determined values, see %[1]s-F/--field%[1]s below. Note that
+			adding request parameters will automatically switch the request method to %[1]sPOST%[1]s.
+			To send the parameters as a %[1]sGET%[1]s query string instead, use %[1]s--method GET%[1]s.
 
 			The %[1]s-F/--field%[1]s flag has magic type conversion based on the format of the value:
 
@@ -302,6 +303,8 @@ func NewCmdApi(f *cmdutil.Factory, runF func(*ApiOptions) error) *cobra.Command 
 }
 
 func apiRun(opts *ApiOptions) error {
+	warnLiteralAtFiles(opts)
+
 	params, err := parseFields(opts)
 	if err != nil {
 		return err

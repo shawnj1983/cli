@@ -4,6 +4,7 @@ import (
 	"github.com/MakeNowJust/heredoc"
 	"github.com/cli/cli/v2/internal/gh/ghtelemetry"
 	"github.com/cli/cli/v2/pkg/cmd/skills/install"
+	"github.com/cli/cli/v2/pkg/cmd/skills/list"
 	"github.com/cli/cli/v2/pkg/cmd/skills/preview"
 	"github.com/cli/cli/v2/pkg/cmd/skills/publish"
 	"github.com/cli/cli/v2/pkg/cmd/skills/search"
@@ -35,6 +36,9 @@ func NewCmdSkills(f *cmdutil.Factory, telemetry ghtelemetry.CommandRecorder) *co
 			# Preview a skill before installing
 			$ gh skill preview github/awesome-copilot documentation-writer
 
+			# List installed skills
+			$ gh skill list
+
 			# Update all installed skills
 			$ gh skill update --all
 
@@ -48,6 +52,7 @@ func NewCmdSkills(f *cmdutil.Factory, telemetry ghtelemetry.CommandRecorder) *co
 	}
 
 	cmd.AddCommand(install.NewCmdInstall(f, telemetry, nil))
+	cmd.AddCommand(list.NewCmdList(f, nil))
 	cmd.AddCommand(preview.NewCmdPreview(f, telemetry, nil))
 	cmd.AddCommand(publish.NewCmdPublish(f, nil))
 	cmd.AddCommand(search.NewCmdSearch(f, telemetry, nil))

@@ -3,6 +3,7 @@ package status
 import (
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"path/filepath"
@@ -41,6 +42,7 @@ type authEntry struct {
 
 type authStatus struct {
 	Hosts map[string][]authEntry `json:"hosts"`
+	Agent string                 `json:"agent,omitempty"`
 }
 
 func newAuthStatus() *authStatus {
@@ -51,6 +53,7 @@ func newAuthStatus() *authStatus {
 
 var authStatusFields = []string{
 	"hosts",
+	"agent",
 }
 
 func (a authStatus) ExportData(fields []string) map[string]interface{} {
@@ -123,16 +126,18 @@ type StatusOptions struct {
 	Config     func() (gh.Config, error)
 	Exporter   cmdutil.Exporter
 
-	Hostname  string
-	ShowToken bool
-	Active    bool
+	Hostname      string
+	ShowToken     bool
+	Active        bool
+	InvokingAgent string
 }
 
 func NewCmdStatus(f *cmdutil.Factory, runF func(*StatusOptions) error) *cobra.Command {
 	opts := &StatusOptions{
-		HttpClient: f.HttpClient,
-		IO:         f.IOStreams,
-		Config:     f.Config,
+		HttpClient:    f.HttpClient,
+		IO:            f.IOStreams,
+		Config:        f.Config,
+		InvokingAgent: f.InvokingAgent,
 	}
 
 	cmd := &cobra.Command{
@@ -204,9 +209,10 @@ func statusRun(opts *StatusOptions) error {
 	if len(hostnames) == 0 {
 		fmt.Fprintf(stderr,
 			"You are not logged into any GitHub hosts. To log in, run: %s\n", cs.Bold("gh auth login"))
+		printAgent(stderr, opts.InvokingAgent)
 		if opts.Exporter != nil {
 			// In machine-friendly mode, we always exit with no error.
-			opts.Exporter.Write(opts.IO, newAuthStatus())
+			opts.Exporter.Write(opts.IO, opts.newStatus())
 			return nil
 		}
 		return cmdutil.SilentError
@@ -215,9 +221,10 @@ func statusRun(opts *StatusOptions) error {
 	if opts.Hostname != "" && !slices.Contains(hostnames, opts.Hostname) {
 		fmt.Fprintf(stderr,
 			"You are not logged into any accounts on %s\n", opts.Hostname)
+		printAgent(stderr, opts.InvokingAgent)
 		if opts.Exporter != nil {
 			// In machine-friendly mode, we always exit with no error.
-			opts.Exporter.Write(opts.IO, newAuthStatus())
+			opts.Exporter.Write(opts.IO, opts.newStatus())
 			return nil
 		}
 		return cmdutil.SilentError
@@ -229,7 +236,7 @@ func statusRun(opts *StatusOptions) error {
 	}
 
 	var finalErr error
-	statuses := newAuthStatus()
+	statuses := opts.newStatus()
 
 	for _, hostname := range hostnames {
 		if opts.Hostname != "" && opts.Hostname != hostname {
@@ -326,7 +333,31 @@ func statusRun(opts *StatusOptions) error {
 		}
 	}
 
+	if opts.InvokingAgent != "" {
+		stream := stdout
+		if finalErr != nil {
+			stream = stderr
+		}
+		if prevEntry {
+			fmt.Fprint(stream, "\n")
+		}
+		printAgent(stream, opts.InvokingAgent)
+	}
+
 	return finalErr
+}
+
+func (opts *StatusOptions) newStatus() *authStatus {
+	s := newAuthStatus()
+	s.Agent = opts.InvokingAgent
+	return s
+}
+
+func printAgent(w io.Writer, agent string) {
+	if agent == "" {
+		return
+	}
+	fmt.Fprintf(w, "Agent: %s\n", agent)
 }
 
 func maskToken(token string) string {

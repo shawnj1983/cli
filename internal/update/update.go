@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cli/cli/v2/internal/agents"
 	"github.com/cli/cli/v2/internal/ci"
 	"github.com/cli/cli/v2/pkg/extensions"
 	"github.com/hashicorp/go-version"
@@ -41,6 +42,9 @@ func ShouldCheckForExtensionUpdate() bool {
 		return false
 	}
 	if os.Getenv("CODESPACES") != "" {
+		return false
+	}
+	if agents.IsDriving(agents.Detect()) {
 		return false
 	}
 	return !ci.IsCI() && IsTerminal(os.Stdout) && IsTerminal(os.Stderr)
@@ -82,6 +86,9 @@ func ShouldCheckForUpdate() bool {
 		return false
 	}
 	if os.Getenv("CODESPACES") != "" {
+		return false
+	}
+	if agents.IsDriving(agents.Detect()) {
 		return false
 	}
 	return !ci.IsCI() && IsTerminal(os.Stdout) && IsTerminal(os.Stderr)

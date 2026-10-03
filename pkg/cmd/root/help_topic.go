@@ -61,6 +61,8 @@ var HelpTopics = []helpTopic{
 			for authoring text.
 
 			%[1]sGH_BROWSER%[1]s, %[1]sBROWSER%[1]s (in order of precedence): the web browser to use for opening links.
+			When a coding agent is driving the CLI, destination URLs are printed instead of
+			opening a browser unless %[1]sGH_BROWSER%[1]s is set.
 
 			%[1]sGH_DEBUG%[1]s: set to a truthy value to enable verbose output on standard error. Set to %[1]sapi%[1]s
 			to additionally log details of HTTP traffic.
@@ -69,7 +71,8 @@ var HelpTopics = []helpTopic{
 			error.
 
 			%[1]sGH_PAGER%[1]s, %[1]sPAGER%[1]s (in order of precedence): a terminal paging program to send standard output
-			to, e.g. %[1]sless%[1]s.
+			to, e.g. %[1]sless%[1]s. When a coding agent is driving the CLI, paging is disabled unless
+			%[1]sGH_PAGER%[1]s is set explicitly.
 
 			%[1]sGLAMOUR_STYLE%[1]s: the style to use for rendering Markdown. See
 			<https://github.com/charmbracelet/glamour#styles>
@@ -94,6 +97,7 @@ var HelpTopics = []helpTopic{
 			%[1]sGH_NO_UPDATE_NOTIFIER%[1]s: set to any value to disable GitHub CLI update notifications.
 			When any command is executed, gh checks for new versions once every 24 hours.
 			If a newer version was found, an upgrade notice is displayed on standard error.
+			Update checks are also skipped when a coding agent is detected as driving the CLI.
 
 			%[1]sGH_NO_EXTENSION_UPDATE_NOTIFIER%[1]s: set to any value to disable GitHub CLI extension update notifications.
 			When an extension is executed, gh checks for new versions for the executed extension once every 24 hours.
@@ -106,6 +110,14 @@ var HelpTopics = []helpTopic{
 			  - %[1]s$HOME/.config/gh%[1]s.
 
 			%[1]sGH_PROMPT_DISABLED%[1]s: set to any value to disable interactive prompting in the terminal.
+			Prompts are also disabled automatically when a coding agent is detected as driving
+			the CLI (for example Cursor Cloud Agent or Claude Code).
+
+			%[1]sAI_AGENT%[1]s: override detection of the coding agent driving the CLI. When set to a
+			value matching %[1]s[a-zA-Z0-9_-]+%[1]s, gh treats that name as the invoking agent
+			(for example %[1]scursor-cloud%[1]s or %[1]sclaude-code%[1]s). This affects the User-Agent,
+			%[1]sgh version%[1]s, %[1]sgh auth status%[1]s, the default %[1]sgh skill --agent%[1]s host, and
+			whether prompts, pagers, and browsers are suppressed.
 
 			%[1]sGH_PATH%[1]s: set the path to the gh executable, useful for when gh can not properly determine
 			its own path such as in the cygwin terminal.

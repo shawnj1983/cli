@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/AlecAivazis/survey/v2/terminal"
+	"github.com/cli/cli/v2/pkg/iostreams"
 )
 
 // FlagErrorf returns a new FlagError that wraps an error produced by
@@ -67,4 +68,16 @@ func (e NoResultsError) Error() string {
 
 func NewNoResultsError(message string) NoResultsError {
 	return NoResultsError{message: message}
+}
+
+// NonInteractiveHint appends a reason when prompts were disabled because
+// a coding agent is driving the CLI.
+func NonInteractiveHint(io *iostreams.IOStreams, msg string) string {
+	if io == nil {
+		return msg
+	}
+	if reason := io.NeverPromptReason(); reason != "" {
+		return fmt.Sprintf("%s (%s; prompts disabled)", msg, reason)
+	}
+	return msg
 }

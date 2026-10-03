@@ -13,6 +13,7 @@ import (
 	"github.com/cli/cli/v2/internal/gh"
 	ghmock "github.com/cli/cli/v2/internal/gh/mock"
 	"github.com/cli/cli/v2/pkg/cmdutil"
+	"github.com/cli/cli/v2/pkg/iostreams"
 	ghAPI "github.com/cli/go-gh/v2/pkg/api"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
@@ -189,6 +190,46 @@ func Test_newIOStreams_prompt(t *testing.T) {
 			assert.Equal(t, tt.promptDisabled, io.GetNeverPrompt())
 		})
 	}
+}
+
+func Test_applyDrivingAgentIO(t *testing.T) {
+	t.Run("no agent keeps defaults", func(t *testing.T) {
+		io, _, _, _ := iostreams.Test()
+		io.SetPager("less")
+		applyDrivingAgentIO(io, "")
+		assert.False(t, io.GetNeverPrompt())
+		assert.False(t, io.GetSpinnerDisabled())
+		assert.Equal(t, "less", io.GetPager())
+	})
+
+	t.Run("cursor IDE keeps defaults", func(t *testing.T) {
+		io, _, _, _ := iostreams.Test()
+		io.SetPager("less")
+		applyDrivingAgentIO(io, "cursor")
+		assert.False(t, io.GetNeverPrompt())
+		assert.False(t, io.GetSpinnerDisabled())
+		assert.Equal(t, "less", io.GetPager())
+	})
+
+	t.Run("cursor-cloud disables prompts pager and spinner", func(t *testing.T) {
+		io, _, _, _ := iostreams.Test()
+		io.SetPager("less")
+		applyDrivingAgentIO(io, "cursor-cloud")
+		assert.True(t, io.GetNeverPrompt())
+		assert.Equal(t, "cursor-cloud is driving the CLI", io.NeverPromptReason())
+		assert.True(t, io.GetSpinnerDisabled())
+		assert.Equal(t, "", io.GetPager())
+	})
+
+	t.Run("explicit GH_PAGER is kept for a driving agent", func(t *testing.T) {
+		t.Setenv("GH_PAGER", "less")
+		io, _, _, _ := iostreams.Test()
+		io.SetPager("less")
+		applyDrivingAgentIO(io, "cursor-cli")
+		assert.True(t, io.GetNeverPrompt())
+		assert.True(t, io.GetSpinnerDisabled())
+		assert.Equal(t, "less", io.GetPager())
+	})
 }
 
 func Test_newIOStreams_spinnerDisabled(t *testing.T) {

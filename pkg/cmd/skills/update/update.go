@@ -10,13 +10,13 @@ import (
 	"github.com/MakeNowJust/heredoc"
 	"github.com/cli/cli/v2/api"
 	"github.com/cli/cli/v2/git"
+	"github.com/cli/cli/v2/internal/agents"
 	"github.com/cli/cli/v2/internal/gh"
 	"github.com/cli/cli/v2/internal/ghrepo"
 	"github.com/cli/cli/v2/internal/prompter"
 	"github.com/cli/cli/v2/internal/skills/discovery"
-	"github.com/cli/cli/v2/internal/skills/frontmatter"
+	"github.com/cli/cli/v2/internal/skills/installed"
 	"github.com/cli/cli/v2/internal/skills/installer"
-	"github.com/cli/cli/v2/internal/skills/registry"
 	"github.com/cli/cli/v2/internal/skills/source"
 	"github.com/cli/cli/v2/pkg/cmdutil"
 	"github.com/cli/cli/v2/pkg/iostreams"
@@ -37,26 +37,15 @@ type UpdateOptions struct {
 	DryRun bool
 	Unpin  bool
 	Dir    string
-}
 
-// installedSkill represents a locally installed skill parsed from its SKILL.md frontmatter.
-type installedSkill struct {
-	name        string
-	repoHost    string
-	owner       string
-	repo        string
-	treeSHA     string // tree SHA at install time
-	pinned      string // explicit pin value (empty = unpinned)
-	sourcePath  string // original path in source repo (e.g. "skills/author/name")
-	dir         string // local directory path
-	host        *registry.AgentHost
-	scope       registry.Scope
-	metadataErr error
+	// DetectAgent returns the coding agent driving the CLI. Tests inject a stub;
+	// production leaves this nil so agents.Detect is used.
+	DetectAgent func() agents.AgentName
 }
 
 // pendingUpdate describes a single skill that has an available update.
 type pendingUpdate struct {
-	local    installedSkill
+	local    installed.Skill
 	newSHA   string // new tree SHA from remote
 	resolved *discovery.ResolvedRef
 	skill    discovery.Skill
@@ -100,6 +89,7 @@ func NewCmdUpdate(f *cmdutil.Factory, runF func(*UpdateOptions) error) *cobra.Co
 
 			In interactive mode, shows which skills have updates and asks for
 			confirmation before proceeding. With %[1]s--all%[1]s, updates without prompting.
+			When a coding agent is driving the CLI, updates apply without %[1]s--all%[1]s.
 			With %[1]s--dry-run%[1]s, reports available updates without modifying any files.
 		`, "`"),
 		Example: heredoc.Doc(`
@@ -153,18 +143,18 @@ func updateRun(opts *UpdateOptions) error {
 	homeDir := installer.ResolveHomeDir()
 
 	// Scan for installed skills
-	var installed []installedSkill
+	var localSkills []installed.Skill
 	if opts.Dir != "" {
-		skills, scanErr := scanInstalledSkills(opts.Dir, nil, "")
+		skills, scanErr := installed.ScanDir(opts.Dir, nil, "")
 		if scanErr != nil {
 			return fmt.Errorf("could not scan directory: %w", scanErr)
 		}
-		installed = skills
+		localSkills = skills
 	} else {
-		installed = scanAllAgents(gitRoot, homeDir)
+		localSkills = installed.ScanAll(gitRoot, homeDir)
 	}
 
-	if len(installed) == 0 {
+	if len(localSkills) == 0 {
 		fmt.Fprintf(opts.IO.ErrOut, "No installed skills found.\n")
 		return nil
 	}
@@ -175,33 +165,33 @@ func updateRun(opts *UpdateOptions) error {
 		for _, name := range opts.Skills {
 			requested[name] = true
 		}
-		var filtered []installedSkill
-		for _, s := range installed {
-			if requested[s.name] {
+		var filtered []installed.Skill
+		for _, s := range localSkills {
+			if requested[s.Name] {
 				filtered = append(filtered, s)
 			}
 		}
 		if len(filtered) == 0 {
 			return fmt.Errorf("none of the specified skills are installed")
 		}
-		installed = filtered
+		localSkills = filtered
 	}
 
 	// Skip skills with invalid metadata rather than aborting the entire
 	// update run. One corrupt skill should not prevent updating others.
 	{
-		var valid []installedSkill
-		for _, s := range installed {
-			if s.metadataErr != nil {
-				fmt.Fprintf(opts.IO.ErrOut, "%s Skipping %s: invalid repository metadata: %s\n", cs.WarningIcon(), s.name, s.metadataErr)
+		var valid []installed.Skill
+		for _, s := range localSkills {
+			if s.MetadataErr != nil {
+				fmt.Fprintf(opts.IO.ErrOut, "%s Skipping %s: invalid repository metadata: %s\n", cs.WarningIcon(), s.Name, s.MetadataErr)
 				continue
 			}
 			valid = append(valid, s)
 		}
-		installed = valid
+		localSkills = valid
 	}
 
-	if len(installed) == 0 {
+	if len(localSkills) == 0 {
 		fmt.Fprintf(opts.IO.ErrOut, "No updatable skills found.\n")
 		return nil
 	}
@@ -216,17 +206,17 @@ func updateRun(opts *UpdateOptions) error {
 		source string // "owner/repo"
 	}
 	prompted := make(map[string]promptedEntry) // dir > entry
-	for i := range installed {
-		s := &installed[i]
-		if s.owner != "" && s.repo != "" {
+	for i := range localSkills {
+		s := &localSkills[i]
+		if s.Owner != "" && s.Repo != "" {
 			continue
 		}
 		if !canPrompt {
-			noMeta = append(noMeta, s.name)
+			noMeta = append(noMeta, s.Name)
 			continue
 		}
-		fmt.Fprintf(opts.IO.ErrOut, "%s %s has no GitHub metadata\n", cs.WarningIcon(), s.name)
-		owner, repo, reason, ok, promptErr := promptForSkillOrigin(opts.Prompter, s.name)
+		fmt.Fprintf(opts.IO.ErrOut, "%s %s has no GitHub metadata\n", cs.WarningIcon(), s.Name)
+		owner, repo, reason, ok, promptErr := promptForSkillOrigin(opts.Prompter, s.Name)
 		if promptErr != nil {
 			return promptErr
 		}
@@ -234,35 +224,35 @@ func updateRun(opts *UpdateOptions) error {
 			if reason != "" {
 				fmt.Fprintf(opts.IO.ErrOut, "  %s %s\n", cs.WarningIcon(), reason)
 			}
-			fmt.Fprintf(opts.IO.ErrOut, "  Skipping %s\n", s.name)
+			fmt.Fprintf(opts.IO.ErrOut, "  Skipping %s\n", s.Name)
 			continue
 		}
-		s.owner = owner
-		s.repo = repo
-		s.repoHost = source.SupportedHost
-		prompted[s.dir] = promptedEntry{name: s.name, source: owner + "/" + repo}
+		s.Owner = owner
+		s.Repo = repo
+		s.RepoHost = source.SupportedHost
+		prompted[s.Dir] = promptedEntry{name: s.Name, source: owner + "/" + repo}
 	}
 
-	opts.IO.StartProgressIndicatorWithLabel(fmt.Sprintf("Checking %d installed skill(s) for updates", len(installed)))
+	opts.IO.StartProgressIndicatorWithLabel(fmt.Sprintf("Checking %d installed skill(s) for updates", len(localSkills)))
 
 	var updates []pendingUpdate
-	var pinned []installedSkill
+	var pinned []installed.Skill
 
 	type repoKey struct{ host, owner, repo string }
 	repoSkills := make(map[repoKey][]discovery.Skill)
 	repoRefs := make(map[repoKey]*discovery.ResolvedRef)
 	repoErrors := make(map[repoKey]bool)
 
-	for _, s := range installed {
-		if s.owner == "" || s.repo == "" {
+	for _, s := range localSkills {
+		if s.Owner == "" || s.Repo == "" {
 			continue
 		}
-		if s.pinned != "" && !opts.Unpin {
+		if s.Pinned != "" && !opts.Unpin {
 			pinned = append(pinned, s)
 			continue
 		}
 
-		key := repoKey{s.repoHost, s.owner, s.repo}
+		key := repoKey{s.RepoHost, s.Owner, s.Repo}
 
 		if repoErrors[key] {
 			continue
@@ -270,22 +260,22 @@ func updateRun(opts *UpdateOptions) error {
 
 		// Resolve ref and discover skills once per repo
 		if _, ok := repoRefs[key]; !ok {
-			resolved, resolveErr := discovery.ResolveRef(apiClient, s.repoHost, s.owner, s.repo, "")
+			resolved, resolveErr := discovery.ResolveRef(apiClient, s.RepoHost, s.Owner, s.Repo, "")
 			if resolveErr != nil {
 				repoErrors[key] = true
 				opts.IO.StopProgressIndicator()
-				fmt.Fprintf(opts.IO.ErrOut, "%s Skipping %s: could not resolve %s/%s: %v\n", cs.WarningIcon(), s.name, s.owner, s.repo, resolveErr)
-				opts.IO.StartProgressIndicatorWithLabel(fmt.Sprintf("Checking %d installed skill(s) for updates", len(installed)))
+				fmt.Fprintf(opts.IO.ErrOut, "%s Skipping %s: could not resolve %s/%s: %v\n", cs.WarningIcon(), s.Name, s.Owner, s.Repo, resolveErr)
+				opts.IO.StartProgressIndicatorWithLabel(fmt.Sprintf("Checking %d installed skill(s) for updates", len(localSkills)))
 				continue
 			}
 			repoRefs[key] = resolved
 
-			skills, discoverErr := discovery.DiscoverSkills(apiClient, s.repoHost, s.owner, s.repo, resolved.SHA)
+			skills, discoverErr := discovery.DiscoverSkills(apiClient, s.RepoHost, s.Owner, s.Repo, resolved.SHA)
 			if discoverErr != nil {
 				repoErrors[key] = true
 				opts.IO.StopProgressIndicator()
-				fmt.Fprintf(opts.IO.ErrOut, "%s Skipping %s: %v\n", cs.WarningIcon(), s.name, discoverErr)
-				opts.IO.StartProgressIndicatorWithLabel(fmt.Sprintf("Checking %d installed skill(s) for updates", len(installed)))
+				fmt.Fprintf(opts.IO.ErrOut, "%s Skipping %s: %v\n", cs.WarningIcon(), s.Name, discoverErr)
+				opts.IO.StartProgressIndicatorWithLabel(fmt.Sprintf("Checking %d installed skill(s) for updates", len(localSkills)))
 				continue
 			}
 			repoSkills[key] = skills
@@ -294,12 +284,12 @@ func updateRun(opts *UpdateOptions) error {
 		resolved := repoRefs[key]
 		for _, remote := range repoSkills[key] {
 			matched := false
-			if s.sourcePath != "" {
-				matched = remote.Path == s.sourcePath
+			if s.SourcePath != "" {
+				matched = remote.Path == s.SourcePath
 			} else {
-				matched = remote.InstallName() == s.name
+				matched = remote.InstallName() == s.Name
 			}
-			if matched && (remote.TreeSHA != s.treeSHA || opts.Force) {
+			if matched && (remote.TreeSHA != s.TreeSHA || opts.Force) {
 				updates = append(updates, pendingUpdate{
 					local:    s,
 					newSHA:   remote.TreeSHA,
@@ -334,7 +324,7 @@ func updateRun(opts *UpdateOptions) error {
 	}
 
 	for _, s := range pinned {
-		fmt.Fprintf(opts.IO.ErrOut, "%s %s is pinned to %s (skipped)\n", cs.Muted("⊘"), s.name, s.pinned)
+		fmt.Fprintf(opts.IO.ErrOut, "%s %s is pinned to %s (skipped)\n", cs.Muted("⊘"), s.Name, s.Pinned)
 	}
 	for _, name := range noMeta {
 		fmt.Fprintf(opts.IO.ErrOut, "%s %s has no GitHub metadata. Reinstall to enable updates\n", cs.WarningIcon(), name)
@@ -351,14 +341,14 @@ func updateRun(opts *UpdateOptions) error {
 
 	fmt.Fprintf(opts.IO.ErrOut, "\n%d update(s) available:\n", len(updates))
 	for _, u := range updates {
-		if u.local.treeSHA == u.newSHA {
+		if u.local.TreeSHA == u.newSHA {
 			fmt.Fprintf(opts.IO.Out, "  %s %s (%s/%s) %s (reinstall) [%s]\n",
-				cs.Cyan("•"), u.local.name, u.local.owner, u.local.repo,
+				cs.Cyan("•"), u.local.Name, u.local.Owner, u.local.Repo,
 				git.ShortSHA(u.newSHA), discovery.ShortRef(u.resolved.Ref))
 		} else {
 			fmt.Fprintf(opts.IO.Out, "  %s %s (%s/%s) %s > %s [%s]\n",
-				cs.Cyan("•"), u.local.name, u.local.owner, u.local.repo,
-				cs.Muted(git.ShortSHA(u.local.treeSHA)), git.ShortSHA(u.newSHA),
+				cs.Cyan("•"), u.local.Name, u.local.Owner, u.local.Repo,
+				cs.Muted(git.ShortSHA(u.local.TreeSHA)), git.ShortSHA(u.newSHA),
 				discovery.ShortRef(u.resolved.Ref))
 		}
 	}
@@ -368,9 +358,10 @@ func updateRun(opts *UpdateOptions) error {
 		return nil
 	}
 
-	if !opts.All {
+	if !opts.All && !drivingAgent(opts) {
 		if !canPrompt {
-			return fmt.Errorf("updates available; re-run with --all to apply, or run interactively to confirm")
+			return fmt.Errorf("%s", cmdutil.NonInteractiveHint(opts.IO,
+				"updates available; re-run with --all to apply, or run interactively to confirm"))
 		}
 		confirmed, confirmErr := opts.Prompter.Confirm(fmt.Sprintf("Update %d skill(s)?", len(updates)), true)
 		if confirmErr != nil {
@@ -385,14 +376,14 @@ func updateRun(opts *UpdateOptions) error {
 	var failed bool
 	for _, u := range updates {
 		installOpts := &installer.Options{
-			Host:      u.local.repoHost,
-			Owner:     u.local.owner,
-			Repo:      u.local.repo,
+			Host:      u.local.RepoHost,
+			Owner:     u.local.Owner,
+			Repo:      u.local.Repo,
 			Ref:       u.resolved.Ref,
 			SHA:       u.resolved.SHA,
 			Skills:    []discovery.Skill{u.skill},
-			AgentHost: u.local.host,
-			Scope:     u.local.scope,
+			AgentHost: u.local.Host,
+			Scope:     u.local.Scope,
 			GitRoot:   gitRoot,
 			HomeDir:   homeDir,
 			Client:    apiClient,
@@ -401,16 +392,16 @@ func updateRun(opts *UpdateOptions) error {
 		// Use the skill's install root as the target. For namespaced
 		// skills (name contains "/"), the dir is two levels below the
 		// root instead of one.
-		if u.local.host == nil {
-			base := filepath.Dir(u.local.dir)
-			if strings.Contains(u.local.name, "/") {
+		if u.local.Host == nil {
+			base := filepath.Dir(u.local.Dir)
+			if strings.Contains(u.local.Name, "/") {
 				base = filepath.Dir(base)
 			}
 			installOpts.Dir = base
 		}
 		_, installErr := installer.Install(installOpts)
 		if installErr != nil {
-			fmt.Fprintf(opts.IO.ErrOut, "%s Failed to update %s: %v\n", cs.FailureIcon(), u.local.name, installErr)
+			fmt.Fprintf(opts.IO.ErrOut, "%s Failed to update %s: %v\n", cs.FailureIcon(), u.local.Name, installErr)
 			failed = true
 			continue
 		}
@@ -419,23 +410,23 @@ func updateRun(opts *UpdateOptions) error {
 		// namespaced layout to flat), remove the old directory so that the
 		// stale copy does not shadow the freshly installed one.
 		newDir := filepath.Join(installOpts.Dir, u.skill.Name)
-		if installOpts.Dir == "" && u.local.host != nil {
-			if d, err := u.local.host.InstallDir(u.local.scope, gitRoot, homeDir); err == nil {
+		if installOpts.Dir == "" && u.local.Host != nil {
+			if d, err := u.local.Host.InstallDir(u.local.Scope, gitRoot, homeDir); err == nil {
 				newDir = filepath.Join(d, u.skill.Name)
 			}
 		}
-		if newDir != "" && u.local.dir != "" && filepath.Clean(newDir) != filepath.Clean(u.local.dir) {
-			_ = os.RemoveAll(u.local.dir)
+		if newDir != "" && u.local.Dir != "" && filepath.Clean(newDir) != filepath.Clean(u.local.Dir) {
+			_ = os.RemoveAll(u.local.Dir)
 			// Remove the parent if it is now empty (leftover namespace directory).
-			parent := filepath.Dir(u.local.dir)
+			parent := filepath.Dir(u.local.Dir)
 			if entries, readErr := os.ReadDir(parent); readErr == nil && len(entries) == 0 {
 				_ = os.Remove(parent)
 			}
 		}
 		if opts.IO.IsStdoutTTY() {
-			fmt.Fprintf(opts.IO.Out, "%s Updated %s\n", cs.SuccessIcon(), u.local.name)
+			fmt.Fprintf(opts.IO.Out, "%s Updated %s\n", cs.SuccessIcon(), u.local.Name)
 		} else {
-			fmt.Fprintf(opts.IO.Out, "Updated %s\n", u.local.name)
+			fmt.Fprintf(opts.IO.Out, "Updated %s\n", u.local.Name)
 		}
 	}
 
@@ -446,123 +437,12 @@ func updateRun(opts *UpdateOptions) error {
 	return nil
 }
 
-// scanAllAgents walks every registered agent's skill directory (project + user scope) and
-// collects installed skills. Shared install roots are scanned only once.
-func scanAllAgents(gitRoot, homeDir string) []installedSkill {
-	scannedDirs := make(map[string]bool)
-	var all []installedSkill
-
-	for i := range registry.Agents {
-		host := &registry.Agents[i]
-		for _, scope := range []registry.Scope{registry.ScopeProject, registry.ScopeUser} {
-			dir, err := host.InstallDir(scope, gitRoot, homeDir)
-			if err != nil {
-				continue
-			}
-			if scannedDirs[dir] {
-				continue
-			}
-			scannedDirs[dir] = true
-			skills, err := scanInstalledSkills(dir, host, scope)
-			if err != nil {
-				continue
-			}
-			all = append(all, skills...)
-		}
+func drivingAgent(opts *UpdateOptions) bool {
+	detect := opts.DetectAgent
+	if detect == nil {
+		detect = agents.Detect
 	}
-
-	return all
-}
-
-// scanInstalledSkills reads all SKILL.md files in a skills directory and
-// extracts GitHub metadata from their frontmatter. It handles both flat
-// layouts ({dir}/{name}/SKILL.md) and namespaced layouts
-// ({dir}/{namespace}/{name}/SKILL.md).
-func scanInstalledSkills(skillsDir string, host *registry.AgentHost, scope registry.Scope) ([]installedSkill, error) {
-	entries, err := os.ReadDir(skillsDir)
-	if os.IsNotExist(err) {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, fmt.Errorf("could not read skills directory: %w", err)
-	}
-
-	var skills []installedSkill
-	for _, e := range entries {
-		if !e.IsDir() {
-			continue
-		}
-
-		// Flat layout: {dir}/{name}/SKILL.md
-		skillFile := filepath.Join(skillsDir, e.Name(), "SKILL.md")
-		if data, readErr := os.ReadFile(skillFile); readErr == nil {
-			if s, ok := parseInstalledSkill(data, e.Name(), filepath.Join(skillsDir, e.Name()), host, scope); ok {
-				skills = append(skills, s)
-				continue
-			}
-		}
-
-		// Namespaced layout: {dir}/{namespace}/{name}/SKILL.md
-		subEntries, subErr := os.ReadDir(filepath.Join(skillsDir, e.Name()))
-		if subErr != nil {
-			continue
-		}
-		for _, sub := range subEntries {
-			if !sub.IsDir() {
-				continue
-			}
-			subSkillFile := filepath.Join(skillsDir, e.Name(), sub.Name(), "SKILL.md")
-			if data, readErr := os.ReadFile(subSkillFile); readErr == nil {
-				installName := e.Name() + "/" + sub.Name()
-				if s, ok := parseInstalledSkill(data, installName, filepath.Join(skillsDir, e.Name(), sub.Name()), host, scope); ok {
-					skills = append(skills, s)
-				}
-			}
-		}
-	}
-
-	return skills, nil
-}
-
-// parseInstalledSkill parses a SKILL.md file and returns an installedSkill.
-func parseInstalledSkill(data []byte, name, dir string, host *registry.AgentHost, scope registry.Scope) (installedSkill, bool) {
-	result, err := frontmatter.Parse(string(data))
-	if err != nil {
-		return installedSkill{
-			name:        name,
-			dir:         dir,
-			host:        host,
-			scope:       scope,
-			metadataErr: fmt.Errorf("invalid SKILL.md: %w", err),
-		}, true
-	}
-
-	s := installedSkill{
-		name:  name,
-		dir:   dir,
-		host:  host,
-		scope: scope,
-	}
-
-	if result.Metadata.Meta != nil {
-		repoInfo, ok, repoErr := source.ParseMetadataRepo(result.Metadata.Meta)
-		if repoErr != nil {
-			s.metadataErr = repoErr
-		} else if ok {
-			if err := source.ValidateSupportedHost(repoInfo.RepoHost()); err != nil {
-				s.metadataErr = err
-			} else {
-				s.repoHost = repoInfo.RepoHost()
-				s.owner = repoInfo.RepoOwner()
-				s.repo = repoInfo.RepoName()
-			}
-		}
-		s.treeSHA, _ = result.Metadata.Meta["github-tree-sha"].(string)
-		s.pinned, _ = result.Metadata.Meta["github-pinned"].(string)
-		s.sourcePath, _ = result.Metadata.Meta["github-path"].(string)
-	}
-
-	return s, true
+	return agents.IsDriving(detect())
 }
 
 // promptForSkillOrigin asks the user for the source repository of a skill

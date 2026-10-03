@@ -11,6 +11,17 @@ func TestFormat(t *testing.T) {
 	}
 }
 
+func TestFormatWithAgent(t *testing.T) {
+	expects := "gh version 1.4.0 (2020-12-15)\nhttps://github.com/cli/cli/releases/tag/v1.4.0\nAgent: cursor-cloud\n"
+	if got := FormatWithAgent("1.4.0", "2020-12-15", "cursor-cloud"); got != expects {
+		t.Errorf("FormatWithAgent() = %q, wants %q", got, expects)
+	}
+
+	if got := FormatWithAgent("1.4.0", "2020-12-15", ""); got != Format("1.4.0", "2020-12-15") {
+		t.Errorf("FormatWithAgent with empty agent should match Format")
+	}
+}
+
 func TestChangelogURL(t *testing.T) {
 	tag := "0.3.2"
 	url := "https://github.com/cli/cli/releases/tag/v0.3.2"

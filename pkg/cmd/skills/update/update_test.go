@@ -9,10 +9,10 @@ import (
 
 	"github.com/MakeNowJust/heredoc"
 	"github.com/cli/cli/v2/git"
+	"github.com/cli/cli/v2/internal/agents"
 	"github.com/cli/cli/v2/internal/config"
 	"github.com/cli/cli/v2/internal/gh"
 	"github.com/cli/cli/v2/internal/prompter"
-	"github.com/cli/cli/v2/internal/skills/registry"
 
 	"github.com/cli/cli/v2/pkg/cmdutil"
 	"github.com/cli/cli/v2/pkg/httpmock"
@@ -72,155 +72,6 @@ func TestNewCmdUpdate_ArgsPassedToOptions(t *testing.T) {
 	assert.True(t, gotOpts.Force)
 }
 
-func TestScanInstalledSkills(t *testing.T) {
-	tests := []struct {
-		name   string
-		setup  func(t *testing.T, dir string)
-		verify func(t *testing.T, skills []installedSkill, err error)
-	}{
-		{
-			name: "happy path with metadata, no metadata, and pinned skills",
-			setup: func(t *testing.T, dir string) {
-				t.Helper()
-
-				// Skill with full metadata
-				skillDir := filepath.Join(dir, "git-commit")
-				require.NoError(t, os.MkdirAll(skillDir, 0o755))
-				content := heredoc.Doc(`
-					---
-					name: git-commit
-					description: Git commit helper
-					metadata:
-					  github-repo: https://github.com/monalisa/awesome-copilot
-					  github-tree-sha: abc123
-					  github-path: skills/git-commit
-					---
-					Body content
-				`)
-				require.NoError(t, os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(content), 0o644))
-
-				// Skill without metadata
-				noMetaDir := filepath.Join(dir, "unknown-skill")
-				require.NoError(t, os.MkdirAll(noMetaDir, 0o755))
-				require.NoError(t, os.WriteFile(filepath.Join(noMetaDir, "SKILL.md"), []byte(heredoc.Doc(`
-					---
-					name: unknown-skill
-					---
-					No metadata here
-				`)), 0o644))
-
-				// Pinned skill
-				pinnedDir := filepath.Join(dir, "pinned-skill")
-				require.NoError(t, os.MkdirAll(pinnedDir, 0o755))
-				require.NoError(t, os.WriteFile(filepath.Join(pinnedDir, "SKILL.md"), []byte(heredoc.Doc(`
-					---
-					name: pinned-skill
-					metadata:
-					  github-repo: https://github.com/octocat/hubot-skills
-					  github-tree-sha: def456
-					  github-pinned: v1.0.0
-					---
-					Pinned content
-				`)), 0o644))
-			},
-			verify: func(t *testing.T, skills []installedSkill, err error) {
-				t.Helper()
-				require.NoError(t, err)
-				assert.Len(t, skills, 3)
-
-				byName := make(map[string]installedSkill)
-				for _, s := range skills {
-					byName[s.name] = s
-				}
-
-				gc := byName["git-commit"]
-				assert.Equal(t, "monalisa", gc.owner)
-				assert.Equal(t, "awesome-copilot", gc.repo)
-				assert.Equal(t, "github.com", gc.repoHost)
-				assert.Equal(t, "abc123", gc.treeSHA)
-				assert.Equal(t, "skills/git-commit", gc.sourcePath)
-				assert.Empty(t, gc.pinned)
-
-				us := byName["unknown-skill"]
-				assert.Empty(t, us.owner)
-				assert.Empty(t, us.repo)
-
-				ps := byName["pinned-skill"]
-				assert.Equal(t, "github.com", ps.repoHost)
-				assert.Equal(t, "v1.0.0", ps.pinned)
-			},
-		},
-		{
-			name: "unsupported host metadata returns error",
-			setup: func(t *testing.T, dir string) {
-				t.Helper()
-				skillDir := filepath.Join(dir, "enterprise-skill")
-				require.NoError(t, os.MkdirAll(skillDir, 0o755))
-				require.NoError(t, os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(heredoc.Doc(`
-					---
-					name: enterprise-skill
-					metadata:
-					  github-repo: https://acme.ghes.com/monalisa/octocat-skills
-					  github-tree-sha: abc123
-					---
-					body
-				`)), 0o644))
-			},
-			verify: func(t *testing.T, skills []installedSkill, err error) {
-				t.Helper()
-				require.NoError(t, err)
-				require.Len(t, skills, 1)
-				require.Error(t, skills[0].metadataErr)
-				assert.Contains(t, skills[0].metadataErr.Error(), "does not currently support GitHub Enterprise Server")
-			},
-		},
-		{
-			name: "non-existent directory returns nil",
-			// no setup needed; dir does not exist
-			verify: func(t *testing.T, skills []installedSkill, err error) {
-				t.Helper()
-				require.NoError(t, err)
-				assert.Nil(t, skills)
-			},
-		},
-		{
-			name: "corrupted YAML is skipped gracefully",
-			setup: func(t *testing.T, dir string) {
-				t.Helper()
-				skillDir := filepath.Join(dir, "corrupt")
-				require.NoError(t, os.MkdirAll(skillDir, 0o755))
-				require.NoError(t, os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(heredoc.Doc(`
-					---
-					not: valid: yaml: [broken
-					---
-					body
-				`)), 0o644))
-			},
-			verify: func(t *testing.T, skills []installedSkill, err error) {
-				t.Helper()
-				require.NoError(t, err)
-				require.Len(t, skills, 1)
-				assert.Equal(t, "corrupt", skills[0].name)
-				assert.ErrorContains(t, skills[0].metadataErr, "invalid SKILL.md")
-			},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// For the non-existent directory case, pass a path that doesn't exist
-			dir := filepath.Join(t.TempDir(), "skills")
-			if tt.setup != nil {
-				require.NoError(t, os.MkdirAll(dir, 0o755))
-				tt.setup(t, dir)
-			}
-
-			skills, err := scanInstalledSkills(dir, nil, "")
-			tt.verify(t, skills, err)
-		})
-	}
-}
-
 func TestPromptForSkillOrigin(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -268,46 +119,6 @@ func TestPromptForSkillOrigin(t *testing.T) {
 			}
 		})
 	}
-}
-
-func TestScanAllAgentsDeduplicatesSharedProjectDirs(t *testing.T) {
-	repoDir := t.TempDir()
-	homeDir := t.TempDir()
-
-	sharedSkillDir := filepath.Join(repoDir, ".agents", "skills", "git-commit")
-	require.NoError(t, os.MkdirAll(sharedSkillDir, 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(sharedSkillDir, "SKILL.md"), []byte(heredoc.Doc(`
-		---
-		name: git-commit
-		metadata:
-		  github-repo: https://github.com/monalisa/octocat-skills
-		  github-tree-sha: abc123
-		---
-		Body
-	`)), 0o644))
-
-	claudeSkillDir := filepath.Join(repoDir, ".claude", "skills", "code-review")
-	require.NoError(t, os.MkdirAll(claudeSkillDir, 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(claudeSkillDir, "SKILL.md"), []byte(heredoc.Doc(`
-		---
-		name: code-review
-		metadata:
-		  github-repo: https://github.com/monalisa/octocat-skills
-		  github-tree-sha: def456
-		---
-		Body
-	`)), 0o644))
-
-	skills := scanAllAgents(repoDir, homeDir)
-	require.Len(t, skills, 2)
-
-	byName := make(map[string]installedSkill)
-	for _, skill := range skills {
-		byName[skill.name] = skill
-	}
-
-	assert.Equal(t, registry.ScopeProject, byName["git-commit"].scope)
-	assert.Equal(t, registry.ScopeProject, byName["code-review"].scope)
 }
 
 func TestUpdateRun(t *testing.T) {
@@ -610,6 +421,67 @@ func TestUpdateRun(t *testing.T) {
 				}
 			},
 			wantErr: "updates available; re-run with --all to apply, or run interactively to confirm",
+		},
+		{
+			name: "driving agent applies updates without --all",
+			setup: func(t *testing.T, dir string) {
+				t.Helper()
+				homeDir := t.TempDir()
+				t.Setenv("HOME", homeDir)
+				t.Setenv("USERPROFILE", homeDir)
+				skillDir := filepath.Join(dir, "code-review")
+				require.NoError(t, os.MkdirAll(skillDir, 0o755))
+				require.NoError(t, os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(heredoc.Doc(`
+					---
+					name: code-review
+					metadata:
+					  github-repo: https://github.com/monalisa/octocat-skills
+					  github-tree-sha: oldsha000
+					  github-path: skills/code-review
+					---
+					Old content
+				`)), 0o644))
+			},
+			stubs: func(reg *httpmock.Registry) {
+				reg.Register(
+					httpmock.REST("GET", "repos/monalisa/octocat-skills/releases/latest"),
+					httpmock.StringResponse(`{"tag_name": "v3.0.0"}`))
+				reg.Register(
+					httpmock.REST("GET", "repos/monalisa/octocat-skills/git/ref/tags/v3.0.0"),
+					httpmock.StringResponse(`{"object": {"sha": "newcommit789", "type": "commit"}}`))
+				reg.Register(
+					httpmock.REST("GET", "repos/monalisa/octocat-skills/git/trees/newcommit789"),
+					httpmock.StringResponse(`{"sha": "newcommit789", "tree": [{"path": "skills/code-review/SKILL.md", "type": "blob", "sha": "newblob1"}, {"path": "skills/code-review", "type": "tree", "sha": "newsha999"}, {"path": "skills", "type": "tree", "sha": "treeshaZ"}], "truncated": false}`))
+				reg.Register(
+					httpmock.REST("GET", "repos/monalisa/octocat-skills/git/trees/newsha999"),
+					httpmock.StringResponse(`{"sha": "newsha999", "tree": [{"path": "SKILL.md", "type": "blob", "sha": "newblob1", "size": 20}], "truncated": false}`))
+				reg.Register(
+					httpmock.REST("GET", "repos/monalisa/octocat-skills/git/blobs/newblob1"),
+					httpmock.StringResponse(fmt.Sprintf(`{"sha": "newblob1", "encoding": "base64", "content": "%s"}`,
+						"IyBDb2RlIFJldmlldyBVcGRhdGVk")))
+			},
+			opts: func(ios *iostreams.IOStreams, dir string, reg *httpmock.Registry) *UpdateOptions {
+				ios.SetStdoutTTY(false)
+				ios.SetStdinTTY(false)
+				return &UpdateOptions{
+					IO:     ios,
+					Config: func() (gh.Config, error) { return config.NewBlankConfig(), nil },
+					HttpClient: func() (*http.Client, error) {
+						return &http.Client{Transport: reg}, nil
+					},
+					GitClient:   &git.Client{RepoDir: dir},
+					Dir:         dir,
+					DetectAgent: func() agents.AgentName { return "cursor-cloud" },
+				}
+			},
+			verify: func(t *testing.T, dir string) {
+				t.Helper()
+				content, err := os.ReadFile(filepath.Join(dir, "code-review", "SKILL.md"))
+				require.NoError(t, err)
+				assert.Contains(t, string(content), "github-repo: https://github.com/monalisa/octocat-skills")
+				assert.NotContains(t, string(content), "Old content")
+			},
+			wantStdout: "Updated code-review",
 		},
 		{
 			name: "force update rewrites SKILL.md on disk",
@@ -1179,6 +1051,9 @@ func TestUpdateRun(t *testing.T) {
 			}
 
 			opts := tt.opts(ios, dir, reg)
+			if opts.DetectAgent == nil {
+				opts.DetectAgent = func() agents.AgentName { return "" }
+			}
 			err := updateRun(opts)
 
 			if tt.wantErr != "" {

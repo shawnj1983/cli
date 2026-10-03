@@ -2,10 +2,36 @@ package api
 
 import (
 	"fmt"
+	"os"
 	"reflect"
 	"strconv"
 	"strings"
 )
+
+// warnLiteralAtFiles prints a warning when -f/--raw-field sends a value that
+// starts with @ and names an existing file (or stdin). Users often mean -F,
+// which reads the file instead of sending the path as a literal string.
+func warnLiteralAtFiles(opts *ApiOptions) {
+	if opts.IO == nil {
+		return
+	}
+	for _, f := range opts.RawFields {
+		key, value, ok := strings.Cut(f, "=")
+		if !ok || !strings.HasPrefix(value, "@") {
+			continue
+		}
+		path := strings.TrimPrefix(value, "@")
+		if path == "" {
+			continue
+		}
+		if path != "-" {
+			if _, err := os.Stat(path); err != nil {
+				continue
+			}
+		}
+		fmt.Fprintf(opts.IO.ErrOut, "warning: -f %s=%s sent the literal string %q; to read a file use -F %s=@%s\n", key, value, value, key, path)
+	}
+}
 
 const (
 	keyStart     = '['

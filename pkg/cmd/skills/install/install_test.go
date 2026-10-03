@@ -14,6 +14,7 @@ import (
 	"github.com/MakeNowJust/heredoc"
 	"github.com/cli/cli/v2/context"
 	"github.com/cli/cli/v2/git"
+	"github.com/cli/cli/v2/internal/agents"
 	"github.com/cli/cli/v2/internal/ghrepo"
 	"github.com/cli/cli/v2/internal/prompter"
 	"github.com/cli/cli/v2/internal/skills/discovery"
@@ -397,6 +398,7 @@ func TestInstallRun(t *testing.T) {
 					Scope:        "project",
 					ScopeChanged: true,
 					Dir:          t.TempDir(),
+					DetectAgent:  func() agents.AgentName { return "" },
 				}
 			},
 			wantStdout: "Installed git-commit",
@@ -2712,4 +2714,86 @@ func TestInstallRun_UpstreamDetection(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestDefaultHostID(t *testing.T) {
+	tests := []struct {
+		name     string
+		detected agents.AgentName
+		want     string
+	}{
+		{name: "no agent falls back to github-copilot", detected: "", want: "github-copilot"},
+		{name: "cursor-cloud maps to cursor", detected: "cursor-cloud", want: "cursor"},
+		{name: "cursor-cli maps to cursor", detected: "cursor-cli", want: "cursor"},
+		{name: "cursor maps to cursor", detected: "cursor", want: "cursor"},
+		{name: "copilot-cli maps to github-copilot", detected: "copilot-cli", want: "github-copilot"},
+		{name: "claude-code", detected: "claude-code", want: "claude-code"},
+		{name: "raw registry ID is used", detected: "windsurf", want: "windsurf"},
+		{name: "unknown agent falls back to github-copilot", detected: "not-a-host", want: "github-copilot"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := defaultHostID(&InstallOptions{
+				DetectAgent: func() agents.AgentName { return tt.detected },
+			})
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestResolveHosts(t *testing.T) {
+	t.Run("explicit --agent wins over detection", func(t *testing.T) {
+		hosts, err := resolveHosts(&InstallOptions{
+			Agent:       "claude-code",
+			DetectAgent: func() agents.AgentName { return "cursor-cloud" },
+		}, false)
+		require.NoError(t, err)
+		require.Len(t, hosts, 1)
+		assert.Equal(t, "claude-code", hosts[0].ID)
+	})
+
+	t.Run("non-interactive uses detected cursor-cloud host", func(t *testing.T) {
+		hosts, err := resolveHosts(&InstallOptions{
+			DetectAgent: func() agents.AgentName { return "cursor-cloud" },
+		}, false)
+		require.NoError(t, err)
+		require.Len(t, hosts, 1)
+		assert.Equal(t, "cursor", hosts[0].ID)
+	})
+
+	t.Run("non-interactive falls back to github-copilot", func(t *testing.T) {
+		hosts, err := resolveHosts(&InstallOptions{
+			DetectAgent: func() agents.AgentName { return "" },
+		}, false)
+		require.NoError(t, err)
+		require.Len(t, hosts, 1)
+		assert.Equal(t, "github-copilot", hosts[0].ID)
+	})
+
+	t.Run("interactive preselects detected agent", func(t *testing.T) {
+		var gotDefaults []string
+		pm := &prompter.PrompterMock{
+			MultiSelectFunc: func(prompt string, defaults []string, options []string) ([]int, error) {
+				gotDefaults = defaults
+				for i, label := range options {
+					if label == "Cursor" {
+						return []int{i}, nil
+					}
+				}
+				return nil, fmt.Errorf("cursor not in options")
+			},
+		}
+
+		ios, _, _, _ := iostreams.Test()
+		hosts, err := resolveHosts(&InstallOptions{
+			IO:          ios,
+			Prompter:    pm,
+			DetectAgent: func() agents.AgentName { return "cursor-cloud" },
+		}, true)
+		require.NoError(t, err)
+		require.Len(t, hosts, 1)
+		assert.Equal(t, "cursor", hosts[0].ID)
+		assert.Equal(t, []string{"Cursor"}, gotDefaults)
+	})
 }

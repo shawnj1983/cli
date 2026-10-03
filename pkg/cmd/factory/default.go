@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"os"
 	"regexp"
 	"time"
 
@@ -239,7 +240,8 @@ func newGitClient(f *cmdutil.Factory) *git.Client {
 
 func newBrowser(f *cmdutil.Factory) browser.Browser {
 	io := f.IOStreams
-	return browser.New("", io.Out, io.ErrOut)
+	_, ghBrowserSet := os.LookupEnv("GH_BROWSER")
+	return browser.ForInvoker(f.InvokingAgent, ghBrowserSet, io.Out, io.ErrOut)
 }
 
 func newPrompter(f *cmdutil.Factory) prompter.Prompter {
