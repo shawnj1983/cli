@@ -7,6 +7,10 @@
   policies:
     - cursor/approval-policies/go-cli.md
 - product: cloud-setup
-  boundary: .cursor/environment.json, .cursor/install.sh, and .cursor/rules/
+  boundary: .cursor/environment.json, .cursor/install.sh, .cursor/rules/, and cursor/fleet/
   policies:
     - cursor/approval-policies/cloud-setup.md
+- product: automations
+  boundary: cursor/automations/ and .github/workflows/agent-verify.yml
+  policies:
+    - cursor/approval-policies/go-cli.md

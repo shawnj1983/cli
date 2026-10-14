@@ -1,6 +1,6 @@
 # Cloud setup policy
 
-Applies to `.cursor/environment.json`, `.cursor/install.sh`, and `.cursor/rules/`.
+Applies to `.cursor/environment.json`, `.cursor/install.sh`, `.cursor/rules/`, and `cursor/fleet/`.
 
 These files may be approved when they only install tools, unset `NO_COLOR` for login shells, or add agent operating guidance, and Bugbot is clean or not present.
 

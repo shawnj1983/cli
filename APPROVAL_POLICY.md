@@ -16,7 +16,7 @@ Require human review (do not approve) when the PR changes any of:
 - authentication, tokens, credentials, or HTTP signing
 - release, attestation, or verification code
 - GitHub workflow files under `.github/workflows/`
-- `APPROVAL_POLICY.md`, `cursor/approval-policies/`, or `cursor/approvals/`
+- `APPROVAL_POLICY.md`, `cursor/approval-policies/`, `cursor/approvals/`, or `cursor/automations/`
 - more than a documentation or Cloud Agent setup change and Bugbot is not present
 
 ## Documentation and setup

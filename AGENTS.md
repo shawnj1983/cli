@@ -15,9 +15,13 @@ make lint                                  # golangci-lint (same as CI)
 
 **Before committing, ensure both tests and linter pass:**
 ```bash
-go test ./...
+make agent-verify
+# or the full suite:
+env -u NO_COLOR go test ./...
 make lint
 ```
+
+Fleet lanes and automation templates live in `cursor/fleet/` and `cursor/automations/`. Classify work with `bash cursor/fleet/dispatch.sh` before spending Ultra on a full-repo test run.
 
 ## Architecture
 

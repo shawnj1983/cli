@@ -13,8 +13,10 @@ Before reviewing or editing a pull request, check out the PR head (`gh pr checko
 
 # Commands
 
+- Lane: `bash cursor/fleet/dispatch.sh` or `bash cursor/fleet/dispatch.sh <pr>`
+- Verify: `make agent-verify` (same as `bash script/agent-verify.sh`)
 - Build: `make`
-- Tests: `env -u NO_COLOR go test ./...`
+- Full tests: `env -u NO_COLOR go test ./...`
 - Lint: `make lint`
 
 Cloud containers set `NO_COLOR=1`. That is an environment artifact. Do not "fix" `pkg/surveyext` color tests by changing assertion code.
