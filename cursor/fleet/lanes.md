@@ -12,3 +12,5 @@ Run `bash cursor/fleet/dispatch.sh` or `bash cursor/fleet/dispatch.sh <pr>` befo
 One automation should own one lane. Do not spawn a second Cloud Agent on the same PR head unless the first is stuck.
 
 The live router is [Pull Request Router](https://cursor.com/automations/2dd0a183-b81b-11f1-977f-f6b8f2fcf9b2). Paste templates from `cursor/automations/` into new Cursor automations; this repo cannot create dashboard automations for you.
+
+Convert Ultra minutes into merges with `cursor/fleet/usage-to-ship.md` and the Daily Ship template.
