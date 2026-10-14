@@ -26,7 +26,17 @@ jobs:
           go-version-file: "go.mod"
 
       - name: Download dependencies
-        run: go mod download
+        shell: bash
+        run: |
+          n=0
+          until go mod download; do
+            n=$((n + 1))
+            if [ "$n" -ge 3 ]; then
+              echo "go mod download failed after ${n} attempts" >&2
+              exit 1
+            fi
+            sleep $((n * 5))
+          done
 
       - name: Run unit and integration tests
         run: go test -race -tags=integration ./...

@@ -46,6 +46,10 @@ completions: bin/gh$(EXE)
 lint:
 	golangci-lint run ./...
 
+.PHONY: agent-verify
+agent-verify:
+	bash script/agent-verify.sh
+
 # just convenience tasks around `go test`
 .PHONY: test
 test:

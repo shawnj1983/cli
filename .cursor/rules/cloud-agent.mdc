@@ -1,0 +1,30 @@
+---
+description: Operating rules for Cloud Agents on this gh CLI fork
+alwaysApply: true
+---
+
+# This repository
+
+This is a Go CLI (`github.com/cli/cli/v2`). Ignore product rules and skills for Zapier, Box, Plain, Grafana, Asana, Slack apps, Vercel, Supabase, Figma, and similar plugins unless the user names that product in the current request.
+
+# Checkout
+
+Before reviewing or editing a pull request, check out the PR head (`gh pr checkout <n>` or the head branch). Do not treat a different local branch as the PR tree.
+
+# Commands
+
+- Lane: `bash cursor/fleet/dispatch.sh` or `bash cursor/fleet/dispatch.sh <pr>`
+- Verify: `make agent-verify` (same as `bash script/agent-verify.sh`)
+- Build: `make`
+- Full tests: `env -u NO_COLOR go test ./...`
+- Lint: `make lint`
+
+Cloud containers set `NO_COLOR=1`. That is an environment artifact. Do not "fix" `pkg/surveyext` color tests by changing assertion code.
+
+# Usage
+
+Prefer Cursor Models (Grok 4.6, Grok 4.5, Composer 2.5) for everyday work. Use Grok Bot (separate app, same Cursor account) for routines that should not spend the editor/agent pool. Do not start long `go test ./...` loops unless needed.
+
+# Reviewers
+
+`.github/CODEOWNERS` still names upstream `@cli/*` teams that do not exist on this fork. Do not assign those teams. Use `cursor/approvals/` and the approval policies instead.

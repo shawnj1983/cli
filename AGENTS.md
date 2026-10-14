@@ -15,9 +15,13 @@ make lint                                  # golangci-lint (same as CI)
 
 **Before committing, ensure both tests and linter pass:**
 ```bash
-go test ./...
+make agent-verify
+# or the full suite:
+env -u NO_COLOR go test ./...
 make lint
 ```
+
+Fleet lanes and automation templates live in `cursor/fleet/` and `cursor/automations/`. Classify work with `bash cursor/fleet/dispatch.sh` before spending Ultra on a full-repo test run.
 
 ## Architecture
 
@@ -169,4 +173,28 @@ client.GraphQL(hostname, query, variables, &data)
 client.REST(hostname, "GET", "repos/owner/repo", nil, &data)
 ```
 
-For host resolution, use `cfg.Authentication().DefaultHost()` — not `ghinstance.Default()` which always returns `github.com`.
+For host resolution, use `cfg.Authentication().DefaultHost()` - not `ghinstance.Default()` which always returns `github.com`.
+
+## Cursor Cloud specific instructions
+
+Cursor Cloud Agent containers set `NO_COLOR=1`. The `AlecAivazis/survey` library honors this and strips ANSI color codes, so three color-assertion tests in `pkg/surveyext` (`Test_GhEditor_Prompt_skip`, `Test_GhEditor_Prompt_editorAppend`, `Test_GhEditor_Prompt_editorTruncate`) fail under the default `go test ./...`. This is an environment artifact, not a code defect. Run the suite with `NO_COLOR` unset for a clean result:
+
+```bash
+env -u NO_COLOR go test ./...
+```
+
+The environment provides the pinned Go toolchain (`go1.26.3`, auto-downloaded per `go.mod`) and `golangci-lint` v2.11.0 on `PATH`, so `make`, `env -u NO_COLOR go test ./...`, and `make lint` work without extra setup. Cloud Agent install is `.cursor/install.sh` (see `.cursor/environment.json`). It writes `/etc/profile.d/00-cursor-unset-no-color.sh` so login shells unset `NO_COLOR`. Agent processes may still inherit `NO_COLOR=1`, so keep the `env -u NO_COLOR` prefix for tests.
+
+## Cloud Agent checkout
+
+Before reviewing or editing a pull request, check out the PR head. Do not treat another local branch as the PR tree.
+
+## Usage
+
+Prefer Cursor Models (Grok 4.6, Grok 4.5, Composer 2.5) for everyday agent work. Use the separate Grok Bot app, signed in with the same Cursor account, for routines that should not spend the editor/agent pool.
+
+## Review on this fork
+
+Enable Cursor Bugbot on this repository so the approval automation has a review signal. `.github/CODEOWNERS` names upstream `@cli/*` teams that do not exist here; use `APPROVAL_POLICY.md`, `cursor/approval-policies/`, and `cursor/approvals/` instead.
+
+This is a Go CLI. Ignore unrelated plugin playbooks (Zapier, Box, Plain, Grafana, Asana, and similar) unless the current request names that product.
