@@ -179,4 +179,18 @@ Cursor Cloud Agent containers set `NO_COLOR=1`. The `AlecAivazis/survey` library
 env -u NO_COLOR go test ./...
 ```
 
-The environment provides the pinned Go toolchain (`go1.26.3`, auto-downloaded per `go.mod`) and `golangci-lint` v2.11.0 on `PATH`, so `make`, `go test ./...`, and `make lint` work without extra setup.
+The environment provides the pinned Go toolchain (`go1.26.3`, auto-downloaded per `go.mod`) and `golangci-lint` v2.11.0 on `PATH`, so `make`, `env -u NO_COLOR go test ./...`, and `make lint` work without extra setup. Cloud Agent install is `.cursor/install.sh` (see `.cursor/environment.json`). It writes `/etc/profile.d/00-cursor-unset-no-color.sh` so login shells unset `NO_COLOR`. Agent processes may still inherit `NO_COLOR=1`, so keep the `env -u NO_COLOR` prefix for tests.
+
+## Cloud Agent checkout
+
+Before reviewing or editing a pull request, check out the PR head. Do not treat another local branch as the PR tree.
+
+## Usage
+
+Prefer Cursor Models (Grok 4.6, Grok 4.5, Composer 2.5) for everyday agent work. Use the separate Grok Bot app, signed in with the same Cursor account, for routines that should not spend the editor/agent pool.
+
+## Review on this fork
+
+Enable Cursor Bugbot on this repository so the approval automation has a review signal. `.github/CODEOWNERS` names upstream `@cli/*` teams that do not exist here; use `APPROVAL_POLICY.md`, `cursor/approval-policies/`, and `cursor/approvals/` instead.
+
+This is a Go CLI. Ignore unrelated plugin playbooks (Zapier, Box, Plain, Grafana, Asana, and similar) unless the current request names that product.
